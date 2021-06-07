@@ -1,3 +1,9 @@
 [submodule "external/asmjit"]
 	path = external/asmjit
-	url = git@github.com:asmjit/asmjit.git
+url=https://github.com/asmjit/asmjit.git
+[submodule "external/fmt"]
+	path = external/fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "external/capstone"]
+	path = external/capstone
+	url = https://github.com/aquynh/capstone.git

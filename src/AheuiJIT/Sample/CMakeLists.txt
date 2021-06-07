@@ -1,2 +1,0 @@
-add_executable(AheuiJITSample main.cpp)
-target_link_libraries(AheuiJITSample AheuiJIT)

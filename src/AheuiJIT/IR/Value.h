@@ -1,37 +1,56 @@
 #pragma once
-#include <cstdlib>
 #include <AheuiJIT/IR/Storage.h>
 
+#include <cassert>
+#include <cstdlib>
+#include <optional>
+#include <string>
+#include <type_traits>
+
+namespace aheuijit {
+
+using Word = int64_t;
+
+enum class ValueType { Local, Constant, Void };
+
 struct Value {
-    Value();
-    virtual ~Value();
+    Value() {
+    }
+    virtual ~Value() {
+    }
+    virtual std::string description() const = 0;
+    virtual ValueType type() const {
+        return ValueType::Void;
+    }
 };
 
-struct RegValue : public Value {
-    explicit RegValue(uint64_t id);
-    ~RegValue() = default;
+using Void = Value;
 
-    uint64_t getID() const;
+struct Local : public Value {
+    Local() : id(0) {
+    }
+    ~Local() = default;
+    explicit Local(uint64_t id) : id(id) {
+    }
+    std::string description() const override;
 
-    void setEndpoint(size_t endpoint);
-    size_t getEndpoint() const;
-private:
+    ValueType type() const override;
+
     uint64_t id;
-    size_t endpoint;
+    std::optional<uint64_t> endpoint = std::nullopt;
 };
 
-struct ConstantValue : public Value {
-    ConstantValue(uint64_t value);
-    ~ConstantValue() = default;
+struct Constant : public Value {
+    Constant() : imm(0) {
+    }
+    ~Constant() = default;
+    explicit Constant(Word imm) : imm(imm) {
+    }
+    std::string description() const override;
 
-    uint64_t get();
-private:
-    uint64_t value;
+    ValueType type() const override;
+
+    Word imm;
 };
 
-struct StorageValue : public Value {
-    StorageValue(Storage store);
-    ~StorageValue() = default;
-private:
-    Storage store;
-};
+}  // namespace aheuijit

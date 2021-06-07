@@ -1,0 +1,467 @@
+#include "Emitter.h"
+
+#include <AheuiJIT/IR/Value.h>
+#include <AheuiJIT/Util/Util.h>
+
+#include <stack>
+
+using namespace asmjit;
+using namespace aheuijit;
+
+#ifdef _WIN32
+
+std::array<x86::Gp, 7> CALLER_SAVE_REGS = { x86::rax, x86::rcx, x86::rdx, x86::r8,
+                                            x86::r9,  x86::r10, x86::r11 };
+
+std::array<x86::Gp, 7> CALLE_SAVE_REGS = { x86::rsi, x86::rdi, x86::rbx, x86::r12,
+                                           x86::r13, x86::r14, x86::r15 };
+
+std::array<x86::Gp, 2> PARAM_REGS = { x86::rcx, x86::rdx };
+
+constexpr int SHADOW_SPACE = 32;
+
+#else
+
+std::array<x86::Gp, 9> CALLER_SAVE_REGS = { x86::rax, x86::rcx, x86::rdx, x86::rsi, x86::rdi,
+                                            x86::r8,  x86::r9,  x86::r10, x86::r11 };
+
+std::array<x86::Gp, 2> PARAM_REGS = { x86::rdi, x86::rsi };
+
+std::array<x86::Gp, 5> CALLE_SAVE_REGS = { x86::rbx, x86::r12, x86::r13, x86::r14, x86::r15 };
+
+constexpr int SHADOW_SPACE = 0;
+
+#endif
+
+void Emitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBlock *> &emitted) {
+    emitPrologue();
+    std::stack<BasicBlock *> todo;
+    std::set<uint64_t> done;
+    exit = code.newLabel();
+
+    if (table.find(bb->location) != table.end()) {
+        code.jmp(table.at(bb->location));
+    } else {
+        todo.push(bb);
+    }
+
+    const auto getOrCreateLabel = [&](uint64_t id) {
+        if (labels.find(id) == labels.end()) {
+            labels.emplace(id, code.newNamedLabel(std::to_string(id).c_str()));
+        }
+        return labels[id];
+    };
+
+    while (!todo.empty()) {
+        block = todo.top();
+        todo.pop();
+        if (done.find(block->id) != done.end()) {
+            continue;
+        }
+        emitted.insert(block);
+
+        const Label label = getOrCreateLabel(block->id);
+        code.bind(label);
+        regAlloc.emitInit();
+
+        const auto lock = regAlloc.allocSystem(x86::rbp);
+        const auto lock2 = regAlloc.allocSystem(x86::rsp);
+        const auto lock3 = regAlloc.allocSystem(x86::rdi);
+
+        Location prevLocation;
+        popFixup = false;
+        for (auto inst : block->insts) {
+            if (inst->location != prevLocation) {
+                popFixup = false;
+            }
+            regAlloc.setInstructionIndex(inst->offset);
+            visit(inst);
+            prevLocation = inst->location;
+        }
+
+        done.insert(block->id);
+
+        switch (block->terminal->getType()) {
+            case TerminalType::Exit:
+                regAlloc.emitDeinit();
+                regAlloc.reset();
+                code.jmp(exit);
+                break;
+            case TerminalType::Link: {
+                regAlloc.emitDeinit();
+                regAlloc.reset();
+                LinkTerminal *term = dynamic_cast<LinkTerminal *>(block->terminal);
+                const auto it = table.find(term->block->location);
+                if (it != table.end()) {
+                    code.jmp(it->second);
+                } else {
+                    const Label label_ = getOrCreateLabel(term->block->id);
+                    code.jmp(label_);
+                    todo.push(term->block);
+                }
+                break;
+            }
+            case TerminalType::Conditional: {
+                const auto lock4 = regAlloc.allocSystem(x86::rax);
+                ConditionalTerminal *term = dynamic_cast<ConditionalTerminal *>(block->terminal);
+                Reg predicate = unwrapValue(term->predicate);
+                code.mov(x86::rax, predicate.get());
+                regAlloc.emitDeinit();
+                regAlloc.reset();
+                code.cmp(x86::rax, 0);
+
+                auto it = table.find(term->pass->location);
+                if (it != table.end()) {
+                    code.je(it->second);
+                } else {
+                    Label pass = getOrCreateLabel(term->pass->id);
+                    code.je(pass);
+                    todo.push(term->pass);
+                }
+
+                it = table.find(term->fail->location);
+                if (it != table.end()) {
+                    code.jmp(it->second);
+                } else {
+                    Label fail = getOrCreateLabel(term->fail->id);
+                    code.jmp(fail);
+                    todo.push(term->fail);
+                }
+
+                break;
+            }
+        }
+    }
+    code.bind(exit);
+    emitEpilouge();
+}
+
+void Emitter::emitMethodCall(void *func, asmjit::x86::Gp arg0, asmjit::x86::Gp arg1) {
+    for (int i = 0; i < CALLER_SAVE_REGS.size(); ++i) {
+        code.push(CALLER_SAVE_REGS[i]);
+    }
+    code.sub(x86::rsp, 8);
+    code.sub(x86::rsp, SHADOW_SPACE);
+    code.mov(PARAM_REGS[0], arg0);
+    code.mov(PARAM_REGS[1], arg1);
+    code.call(reinterpret_cast<uint64_t>(func));
+    code.add(x86::rsp, SHADOW_SPACE);
+    code.add(x86::rsp, 8);
+    for (int i = CALLER_SAVE_REGS.size() - 1; i >= 0; --i) {
+        code.pop(CALLER_SAVE_REGS[i]);
+    }
+}
+
+void Emitter::emitRetMethodCall(void *func, asmjit::x86::Gp arg0, asmjit::x86::Gp ret) {
+    bool filtered = false;
+    for (int i = 0; i < CALLER_SAVE_REGS.size(); ++i) {
+        if (CALLER_SAVE_REGS[i] != ret) {
+            code.push(CALLER_SAVE_REGS[i]);
+        } else {
+            filtered = true;
+        }
+    }
+    if (!filtered)
+        code.sub(x86::rsp, 8);
+    code.sub(x86::rsp, SHADOW_SPACE);
+    code.mov(PARAM_REGS[0], arg0);
+    code.call(reinterpret_cast<uint64_t>(func));
+    code.mov(ret, x86::rax);
+    code.add(x86::rsp, SHADOW_SPACE);
+    if (!filtered)
+        code.add(x86::rsp, 8);
+    for (int i = CALLER_SAVE_REGS.size() - 1; i >= 0; --i) {
+        if (CALLER_SAVE_REGS[i] != ret) {
+            code.pop(CALLER_SAVE_REGS[i]);
+        }
+    }
+}
+
+void Emitter::emitFunctionCall(void *func, asmjit::x86::Gp arg0) {
+    for (int i = 0; i < CALLER_SAVE_REGS.size(); ++i) {
+        code.push(CALLER_SAVE_REGS[i]);
+    }
+    code.sub(x86::rsp, 8);
+    code.sub(x86::rsp, SHADOW_SPACE);
+    code.mov(PARAM_REGS[0], arg0);
+    code.call(reinterpret_cast<uint64_t>(func));
+    code.add(x86::rsp, SHADOW_SPACE);
+    code.add(x86::rsp, 8);
+    for (int i = CALLER_SAVE_REGS.size() - 1; i >= 0; --i) {
+        code.pop(CALLER_SAVE_REGS[i]);
+    }
+}
+
+void Emitter::emitPrologue() {
+    code.push(x86::rbp);
+    code.mov(x86::rbp, x86::rsp);
+    code.sub(x86::rsp, 8);
+
+    for (int i = 0; i < CALLE_SAVE_REGS.size(); ++i) {
+        code.push(CALLE_SAVE_REGS[i]);
+    }
+
+    code.mov(x86::rdi, PARAM_REGS[0]);
+}
+
+void Emitter::emitEpilouge() {
+    for (int i = CALLE_SAVE_REGS.size() - 1; i >= 0; --i) {
+        code.pop(CALLE_SAVE_REGS[i]);
+    }
+
+    code.mov(x86::rsp, x86::rbp);
+    code.pop(x86::rbp);
+    code.ret();
+}
+
+void Emitter::emitJITRequest() {
+    regAlloc.emitDeinitStub();
+    if (popFixup) {
+        if (inst->location.pointer.queue) {
+            x86::Mem cursorPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueCursor));
+            code.mov(x86::rbx, cursorPtr);
+            code.lea(x86::rbx, x86::ptr(x86::rbx, -8));
+            code.mov(cursorPtr, x86::rbx);
+        } else {
+            code.mov(x86::rax, x86::ptr(x86::rdi, offsetof(JITContext, storage)));
+            x86::Mem stackPtr =
+                x86::ptr(x86::rdi, x86::rax, 3, offsetof(JITContext, storageBuffer));
+            code.mov(x86::rbx, stackPtr);
+            code.lea(x86::rbx, x86::ptr(x86::rbx, -8));
+            code.mov(stackPtr, x86::rbx);
+        }
+    }
+    x86::Mem patchTable = x86::ptr(x86::rdi, offsetof(JITContext, exhaustPatchTable));
+    code.mov(x86::rax, patchTable);
+    code.lea(x86::rax, x86::ptr(x86::rax, offsetof(JITHashTable, beans)));
+    code.mov(x86::rdx, imm(inst->location.hash()));
+    const uint64_t beanOffset = (inst->location.hash() & (HASH_TABLE_BEANS - 1))
+                                << HAST_TABLE_BEAN_SHIFT;
+    code.lea(x86::rax, x86::qword_ptr(x86::rax, beanOffset));
+    code.xor_(x86::rcx, x86::rcx);
+    const Label loopBegin = code.newLabel();
+    const Label jitRequest = code.newLabel();
+    code.bind(loopBegin);
+    code.mov(x86::r9, x86::qword_ptr(x86::rax, x86::rcx));
+    code.mov(x86::r10, x86::qword_ptr(x86::rax, x86::rcx, 0, 8));
+    code.mov(x86::r8, x86::r10);
+    code.or_(x86::r10, x86::r9);
+    code.cmp(x86::r10, 0);
+    code.je(jitRequest);
+    code.add(x86::rcx, 16);
+    code.cmp(x86::r9, x86::rdx);
+    code.jne(loopBegin);
+    code.jmp(x86::r8);
+    code.bind(jitRequest);
+    emitSetLocation(inst->location);
+    code.jmp(exit);
+}
+
+void Emitter::emitSetLocation(const Location &location) {
+    x86::Mem locationPtr = x86::dword_ptr(x86::rdi, offsetof(JITContext, location));
+    code.mov(locationPtr, location.x);
+    locationPtr.addOffset(4);
+    code.mov(locationPtr, location.y);
+    locationPtr.addOffset(4);
+    code.mov(locationPtr, location.pointer.queue);
+    locationPtr.addOffset(4);
+    code.mov(locationPtr, location.pointer.vx);
+    locationPtr.addOffset(4);
+    code.mov(locationPtr, location.pointer.vy);
+}
+
+void Emitter::visit(Instruction *inst) {
+    InstructionVisitorCaller<Emitter> caller;
+    this->inst = inst;
+    caller.call(*this, inst);
+}
+
+inline Reg Emitter::unwrapValue(Value *value) {
+    Reg out;
+    if (value->type() == ValueType::Local) {
+        out = regAlloc.allocLocal(dynamic_cast<Local *>(value));
+    } else {
+        out = regAlloc.allocTmp();
+        Constant *cc = dynamic_cast<Constant *>(value);
+        code.mov(out.get(), cc->imm);
+    }
+    return out;
+}
+
+void Emitter::add(Value *lhs, Value *rhs) {
+    Reg dest = regAlloc.allocLocal(inst->output);
+    Reg a = unwrapValue(lhs);
+    Reg b = unwrapValue(rhs);
+    code.mov(dest.get(), a.get());
+    code.add(dest.get(), b.get());
+}
+
+void Emitter::sub(Value *lhs, Value *rhs) {
+    Reg dest = regAlloc.allocLocal(inst->output);
+    Reg a = unwrapValue(lhs);
+    Reg b = unwrapValue(rhs);
+    code.mov(dest.get(), a.get());
+    code.sub(dest.get(), b.get());
+}
+
+void Emitter::mul(Value *lhs, Value *rhs) {
+    const auto lock = regAlloc.allocSystem(x86::rax);
+    const auto lock2 = regAlloc.allocSystem(x86::rdx);
+    Reg dest = regAlloc.allocLocal(inst->output);
+    Reg a = unwrapValue(lhs);
+    Reg b = unwrapValue(rhs);
+    code.mov(x86::rax, a.get());
+    code.imul(b.get());
+    code.mov(dest.get(), x86::rax);
+}
+
+void Emitter::div(Value *lhs, Value *rhs) {
+    const auto lock = regAlloc.allocSystem(x86::rax);
+    const auto lock2 = regAlloc.allocSystem(x86::rdx);
+    Reg dest = regAlloc.allocLocal(inst->output);
+    Reg a = unwrapValue(lhs);
+    Reg b = unwrapValue(rhs);
+    code.mov(x86::rax, a.get());
+    code.cqo(x86::rdx, x86::rax);
+    code.idiv(b.get());
+    code.mov(dest.get().r32(), x86::eax);
+}
+
+void Emitter::mod(Value *lhs, Value *rhs) {
+    const auto lock = regAlloc.allocSystem(x86::rax);
+    const auto lock2 = regAlloc.allocSystem(x86::rdx);
+    Reg dest = regAlloc.allocLocal(inst->output);
+    Reg a = unwrapValue(lhs);
+    Reg b = unwrapValue(rhs);
+    code.mov(x86::rax, a.get());
+    code.cqo(x86::rdx, x86::rax);
+    code.idiv(b.get());
+    code.mov(dest.get().r32(), x86::edx);
+}
+
+void Emitter::cmp(Value *lhs, Value *rhs) {
+    Reg dest = regAlloc.allocLocal(inst->output);
+    Reg a = unwrapValue(lhs);
+    Reg b = unwrapValue(rhs);
+    code.xor_(dest.get(), dest.get());
+    code.cmp(a.get(), b.get());
+    code.setge(dest.get().r8());
+}
+
+void Emitter::pushStack(Value *value) {
+    Reg valueReg = unwrapValue(value);
+    Reg store = regAlloc.allocTmp();
+    Reg stack = regAlloc.allocTmp();
+    code.mov(store.get().r32(), x86::ptr(x86::rdi, offsetof(JITContext, storage)));
+    x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, storageBuffer));
+    code.mov(stack.get(), stackPtr);
+    code.lea(stack.get(), x86::ptr(stack.get(), -8));
+    code.mov(x86::ptr(stack.get()), valueReg.get());
+    code.mov(stackPtr, stack.get());
+}
+
+void Emitter::popStack(Void *) {
+    Label die = code.newLabel();
+    Label end = code.newLabel();
+    Reg outputReg = regAlloc.allocLocal(inst->output);
+    Reg store = regAlloc.allocTmp();
+    Reg stack = regAlloc.allocTmp();
+    Reg stackFront = regAlloc.allocTmp();
+    code.mov(store.get().r32(), x86::ptr(x86::rdi, offsetof(JITContext, storage)));
+    x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, storageBuffer));
+    x86::Mem stackFrontPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, stackFronts));
+    code.mov(stack.get(), stackPtr);
+    code.mov(stackFront.get(), stackFrontPtr);
+    code.cmp(stack.get(), stackFront.get());
+    code.je(die);
+    code.mov(outputReg.get(), x86::ptr(stack.get()));
+    code.lea(stack.get(), x86::ptr(stack.get(), 8));
+    code.mov(stackPtr, stack.get());
+    code.jmp(end);
+    code.bind(die);
+    emitJITRequest();
+    code.bind(end);
+    popFixup = true;
+}
+
+void Emitter::pushQueueFront(Value *value) {
+    Reg valueReg = unwrapValue(value);
+    x86::Mem queueCurosrPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueCursor));
+    Reg queueCursor = regAlloc.allocTmp();
+    code.mov(queueCursor.get(), queueCurosrPtr);
+    code.mov(x86::ptr(queueCursor.get()), valueReg.get());
+    code.lea(queueCursor.get(), x86::ptr(queueCursor.get(), 8));
+    code.mov(queueCurosrPtr, queueCursor.get());
+}
+
+void Emitter::pushQueueBack(Value *value) {
+    Reg valueReg = unwrapValue(value);
+    x86::Mem queueBottomPtr = x86::ptr(x86::rdi, offsetof(JITContext, storageBuffer));
+    Reg queueBottom = regAlloc.allocTmp();
+    code.mov(queueBottom.get(), queueBottomPtr);
+    code.lea(queueBottom.get(), x86::ptr(queueBottom.get(), -8));
+    code.mov(x86::ptr(queueBottom.get()), valueReg.get());
+    code.mov(queueBottomPtr, queueBottom.get());
+}
+
+void Emitter::popQueue(Void *) {
+    Label die = code.newLabel();
+    Label end = code.newLabel();
+    Reg outputReg = regAlloc.allocLocal(inst->output);
+    x86::Mem queueBottomPtr = x86::ptr(x86::rdi, offsetof(JITContext, storageBuffer));
+    x86::Mem queueCurosrPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueCursor));
+    Reg queueCursor = regAlloc.allocTmp();
+    Reg queueBottom = regAlloc.allocTmp();
+    code.mov(queueCursor.get(), queueCurosrPtr);
+    code.mov(queueBottom.get(), queueBottomPtr);
+    code.cmp(queueCursor.get(), queueBottom.get());
+    code.je(die);
+    code.lea(queueCursor.get(), x86::ptr(queueCursor.get(), -8));
+    code.mov(outputReg.get(), x86::ptr(queueCursor.get()));
+    code.mov(queueCurosrPtr, queueCursor.get());
+    code.jmp(end);
+    code.bind(die);
+    emitJITRequest();
+    code.bind(end);
+    popFixup = true;
+}
+
+void Emitter::setStore(Value *value) {
+    Reg valueReg = unwrapValue(value);
+    code.mov(x86::ptr(x86::rdi, offsetof(JITContext, storage)), valueReg.get());
+}
+
+void Emitter::getStore(Void *) {
+    Reg dest = regAlloc.allocLocal(inst->output);
+    code.mov(dest.get(), x86::ptr(x86::rdi, offsetof(JITContext, storage)));
+}
+
+void Emitter::outputNum(Value *value) {
+    Reg runtimePtr = regAlloc.allocTmp();
+    Reg valueReg = unwrapValue(value);
+    code.mov(runtimePtr.get(), x86::ptr(x86::rdi, offsetof(JITContext, runtime)));
+    emitMethodCall(METHOD_TO_POINTER(Runtime, printNum, void, Word), runtimePtr.get(),
+                   valueReg.get());
+}
+
+void Emitter::outputChar(Value *value) {
+    Reg runtimePtr = regAlloc.allocTmp();
+    Reg valueReg = unwrapValue(value);
+    code.mov(runtimePtr.get(), x86::ptr(x86::rdi, offsetof(JITContext, runtime)));
+    emitMethodCall(METHOD_TO_POINTER(Runtime, printChar, void, Word), runtimePtr.get(),
+                   valueReg.get());
+}
+
+void Emitter::inputNum(Void *) {
+    Reg runtimePtr = regAlloc.allocTmp();
+    Reg dest = regAlloc.allocLocal(inst->output);
+    code.mov(runtimePtr.get(), x86::ptr(x86::rdi, offsetof(JITContext, runtime)));
+    emitRetMethodCall(METHOD_TO_POINTER(Runtime, inputNum, Word), runtimePtr.get(), dest.get());
+}
+
+void Emitter::inputChar(Void *) {
+    Reg runtimePtr = regAlloc.allocTmp();
+    Reg dest = regAlloc.allocLocal(inst->output);
+    code.mov(runtimePtr.get(), x86::ptr(x86::rdi, offsetof(JITContext, runtime)));
+    emitRetMethodCall(METHOD_TO_POINTER(Runtime, inputChar, Word), runtimePtr.get(), dest.get());
+}
