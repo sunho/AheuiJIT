@@ -44,7 +44,7 @@ C++17을 지원하는 컴파일러와 cmake을 깔고 아래 명령어를 실행
 ```
 git submodul update --init
 mkdir build
-cd buildㅌ
+cd build
 cmake ..
 ```
 
