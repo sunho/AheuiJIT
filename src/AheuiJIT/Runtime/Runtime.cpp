@@ -8,8 +8,7 @@
 
 using namespace aheuijit;
 
-Runtime::Runtime(std::ostream& out, std::istream& in)
-    : ctx(std::make_unique<JITContext>()), translator(*this), out(out), in(in) {
+Runtime::Runtime() : ctx(std::make_unique<JITContext>()), translator(*this) {
     storages.fill(0);
 }
 
@@ -78,7 +77,7 @@ void Runtime::resetState() {
 }
 
 void Runtime::printNum(Word word) {
-    out << word;
+    printf("%lld", word);
 }
 
 Word Runtime::inputNum() {
@@ -89,24 +88,18 @@ Word Runtime::inputNum() {
 
 // https://github.com/aheui/caheui/blob/master/aheui.c#L113
 
-inline Word readOneChar(std::istream& in) {
-    char ch;
-    in.get(ch);
-    return (unsigned char)ch;
-}
-
 Word Runtime::inputChar() {
-    Word a = readOneChar(in);
+    Word a = getchar();
 
     if (a < 0x80) {
         return a;
     } else if ((a & 0xf0) == 0xf0) {
-        return ((a & 0x07) << 18) + ((readOneChar(in) & 0x3f) << 12) +
-               ((readOneChar(in) & 0x3f) << 6) + (readOneChar(in) & 0x3f);
+        return ((a & 0x07) << 18) + ((getchar() & 0x3f) << 12) + ((getchar() & 0x3f) << 6) +
+               (getchar() & 0x3f);
     } else if ((a & 0xe0) == 0xe0) {
-        return ((a & 0x0f) << 12) + ((readOneChar(in) & 0x3f) << 6) + (readOneChar(in) & 0x3f);
+        return ((a & 0x0f) << 12) + ((getchar() & 0x3f) << 6) + (getchar() & 0x3f);
     } else if ((a & 0xc0) == 0xc0) {
-        return ((a & 0x1f) << 6) + (readOneChar(in) & 0x3f);
+        return ((a & 0x1f) << 6) + (getchar() & 0x3f);
     } else {
         return -1;
     }
@@ -114,18 +107,18 @@ Word Runtime::inputChar() {
 
 void Runtime::printChar(Word word) {
     if (word < 0x80) {
-        out << (char)word;
+        putchar(word);
     } else if (word < 0x0800) {
-        out << (char)(0xc0 | (word >> 6));
-        out << (char)(0x80 | ((word >> 0) & 0x3f));
+        putchar(0xc0 | (word >> 6));
+        putchar(0x80 | ((word >> 0) & 0x3f));
     } else if (word < 0x10000) {
-        out << (char)(0xe0 | (word >> 12));
-        out << (char)(0x80 | ((word >> 6) & 0x3f));
-        out << (char)(0x80 | ((word >> 0) & 0x3f));
+        putchar(0xe0 | (word >> 12));
+        putchar(0x80 | ((word >> 6) & 0x3f));
+        putchar(0x80 | ((word >> 0) & 0x3f));
     } else if (word < 0x110000) {
-        out << (char)(0xf0 | (word >> 18));
-        out << (char)(0x80 | ((word >> 12) & 0x3f));
-        out << (char)(0x80 | ((word >> 6) & 0x3f));
-        out << (char)(0x80 | ((word >> 0) & 0x3f));
+        putchar(0xf0 | (word >> 18));
+        putchar(0x80 | ((word >> 12) & 0x3f));
+        putchar(0x80 | ((word >> 6) & 0x3f));
+        putchar(0x80 | ((word >> 0) & 0x3f));
     }
 }

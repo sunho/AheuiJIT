@@ -43,7 +43,7 @@ Translator::Translator(Runtime &rt)
     : parent(rt), rt(new asmjit::JitRuntime, [](asmjit::JitRuntime *rt) { delete rt; }) {
     passManager.addBasicBlockPass(std::make_unique<AggregatePushPopPass>());
     passManager.addBasicBlockPass(std::make_unique<RemoveDeadStoreUpdate>());
-    // FIXME: passManager.addBasicBlockPass(std::make_unique<ConstantFoldPass>());
+    passManager.addBasicBlockPass(std::make_unique<ConstantFoldPass>());
     passManager.addBasicBlockPass(std::make_unique<EndpointPass>());
     passManager.addBasicBlockPass(std::make_unique<RemoveDeadAssignmentPass>());
 }

@@ -2,6 +2,7 @@
 
 #include <AheuiJIT/IR/Value.h>
 #include <AheuiJIT/Util/Util.h>
+#include <fmt/printf.h>
 
 #include <stack>
 
@@ -59,6 +60,7 @@ void Emitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBlock *>
         if (done.find(block->id) != done.end()) {
             continue;
         }
+        LOG(block->description())
         emitted.insert(block);
 
         const Label label = getOrCreateLabel(block->id);

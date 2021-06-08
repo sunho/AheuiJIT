@@ -30,11 +30,13 @@ inlcude와 lib폴더에는 정적 라이브러리로 빌드된 AheuiJIT이 있�
 
 ## 성능
 
-logo 아희 테스트를 0.29초 안에 완료합니다. 이는 [기존 비교표](http://xnuk.github.io/Comparison-of-aheui-implementations/) 기준 Algy/aheui-cc (0.11초)를 제외한 모든 구현체보다 월등히 빠른 속도입니다.
+logo 아희 테스트를 0.21초 안에 완료합니다. (JIT 컴파일 시간 0.05초 포함) 이는 [기존 비교표](http://xnuk.github.io/Comparison-of-aheui-implementations/) 기준 Algy/aheui-cc (0.11초)를 제외한 모든 구현체보다 월등히 빠른 속도입니다. 
 
 ```
 /usr/bin/time AheuiJITCli logo.aheui > out.out
-0.29 real         0.29 user         0.00 sys
+real    0m0.218s
+user    0m0.213s
+sys     0m0.004s
 ```
 
 ## 빌드 

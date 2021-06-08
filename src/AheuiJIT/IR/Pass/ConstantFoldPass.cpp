@@ -32,9 +32,10 @@ bool ConstantFoldPass::runOnBlock(Builder& b, BasicBlock* block) {
     for (auto it = block->insts.begin(); it != block->insts.end();) {
         Instruction* inst = *it;
         for (int i = 0; i < inst->args.size(); ++i) {
-            if (inst->args[i] && inst->args[i]->type() == ValueType::Local) {
+            if (inst->args[i]) {
                 const auto it = foldedValues.find(inst->args[i]);
                 if (it != foldedValues.end()) {
+                    ASSERT(it->second->type() == ValueType::Constant)
                     inst->args[i] = it->second;
                 }
             }
@@ -50,9 +51,10 @@ bool ConstantFoldPass::runOnBlock(Builder& b, BasicBlock* block) {
                     inst->args[1]->type() == ValueType::Constant) {
                     Constant* lhs = dynamic_cast<Constant*>(inst->args[0]);
                     Constant* rhs = dynamic_cast<Constant*>(inst->args[1]);
-                    lhs->imm = doALU(inst->opcode, lhs->imm, rhs->imm);
-                    foldedValues.emplace(inst->output, lhs);
+                    Constant* res = b.createConstant(doALU(inst->opcode, lhs->imm, rhs->imm));
+                    foldedValues.emplace(inst->output, res);
                     block->insts.erase(it++);
+                    continue;
                 }
                 break;
             }
