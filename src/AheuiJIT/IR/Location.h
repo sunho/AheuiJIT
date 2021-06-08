@@ -26,6 +26,7 @@ struct Location {
     explicit Location(int x, int y, bool queue, int vx, int vy)
         : x(x), y(y), pointer(queue, vx, vy) {
     }
+    static Location unpack(uint64_t packed);
     Location() = default;
     ~Location() = default;
     int x{ 0 };
@@ -33,6 +34,7 @@ struct Location {
     Pointer pointer;
 
     uint64_t hash() const;
+    uint64_t pack() const;
 
     bool operator<(const Location &other) const;
     bool operator==(const Location &other) const;

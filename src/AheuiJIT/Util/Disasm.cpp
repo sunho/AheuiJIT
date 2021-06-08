@@ -3,7 +3,9 @@
 #include <capstone/capstone.h>
 #include <fmt/printf.h>
 
-void disassembleX86(void *buf, size_t size) {
+using namespace aheuijit;
+
+void aheuijit::disassembleX86(void *buf, size_t size) {
     csh handle;
     cs_insn *insn;
     cs_err err = cs_open(CS_ARCH_X86, CS_MODE_64, &handle);

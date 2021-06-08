@@ -50,8 +50,10 @@ struct Emitter {
     void emitMethodCall(void *func, asmjit::x86::Gp arg0, asmjit::x86::Gp arg1);
     void emitRetMethodCall(void *func, asmjit::x86::Gp arg0, asmjit::x86::Gp ret);
     void emitFunctionCall(void *func, asmjit::x86::Gp arg0);
-    void emitJITRequest();
+    void emitJITRequest(const Location &location);
+    void emitJITRequestImpl();
     void emitSetLocation(const Location &location);
+    void emitSubroutines();
 
     inline Reg unwrapValue(Value *value);
 
@@ -62,7 +64,8 @@ struct Emitter {
     BasicBlock *block{ nullptr };
     Instruction *inst{ nullptr };
     std::map<uint64_t, asmjit::Label> labels;
-    asmjit::Label exit;
+    asmjit::Label exitLabel;
+    asmjit::Label jitRequestLabel;
 };
 
 }  // namespace aheuijit

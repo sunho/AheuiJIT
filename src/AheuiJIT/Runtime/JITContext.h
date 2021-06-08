@@ -49,7 +49,7 @@ struct JITContext {
     ~JITContext() = default;
 
     Runtime* runtime{ nullptr };
-    Location location;
+    uint64_t location{ 0 };
     int storage{ 0 };
     std::array<uint64_t, 27> stackFronts;
     uint64_t queueFront{ 0 };

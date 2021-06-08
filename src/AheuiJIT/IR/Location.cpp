@@ -47,10 +47,23 @@ bool Pointer::operator==(const Pointer &other) const {
     return queue == other.queue && vx == other.vx && vy == other.vy;
 }
 
+Location Location::unpack(uint64_t packed) {
+    int x = packed & 0xFFFFFF;
+    int y = (packed >> 24) & 0xFFFFFF;
+    int queue = (packed >> 48) & 0xF;
+    int vx = static_cast<int>((packed >> 52) & 0xF) - 2;
+    int vy = static_cast<int>((packed >> 56) & 0xF) - 2;
+    return Location(x, y, queue, vx, vy);
+}
+
 uint64_t Location::hash() const {
-    return ::hash(((uint64_t)x & 0xFFFFFF) | (((uint64_t)y & 0xFFFFFF) << 24) |
-                  ((uint64_t)pointer.queue << 48) | ((uint64_t)(pointer.vx + 2) << 52) |
-                  ((uint64_t)(pointer.vy + 2) << 56));
+    return ::hash(pack());
+}
+
+uint64_t Location::pack() const {
+    return ((uint64_t)x & 0xFFFFFF) | (((uint64_t)y & 0xFFFFFF) << 24) |
+           ((uint64_t)pointer.queue << 48) | ((uint64_t)(pointer.vx + 2) << 52) |
+           ((uint64_t)(pointer.vy + 2) << 56);
 }
 
 bool Location::operator<(const Location &other) const {

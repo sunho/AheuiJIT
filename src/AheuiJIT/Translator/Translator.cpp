@@ -150,7 +150,7 @@ void Translator::buildBlocks(const Location &location) {
             visited.insert(cur);
             token = parseChar(getCode(cur));
             LOG("Translating x: {} y: {} op: {} orig: {}", cur.x, cur.y, describeTokenOp(token.op),
-                covnert_u16_to_utf8(getCode(cur)))
+                covnert_utf16_to_utf8(getCode(cur)))
             notTermed = decodeToken(b, token);
             if (notTermed) {
                 cur = updateLocationPointer(cur, token.dir);

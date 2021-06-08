@@ -35,7 +35,7 @@ set(SOURCE_LIST
 
 add_library(AheuiJIT ${SOURCE_LIST})
 target_include_directories(AheuiJIT PUBLIC ..)
-target_include_directories(AheuiJIT PRIVATE ${capstone_INCLUDE_DIRS} asmjit fmt)
+target_include_directories(AheuiJIT PRIVATE ${capstone_INCLUDE_DIRS})
 target_link_libraries(AheuiJIT PRIVATE asmjit fmt capstone-static)
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCE_LIST})
 

@@ -1,6 +1,7 @@
 #include "Runtime.h"
 
 #include <AheuiJIT/Util/Util.h>
+#include <fmt/printf.h>
 
 #include <fstream>
 #include <iostream>
@@ -17,12 +18,14 @@ Word Runtime::run(const std::u16string& code) {
 
     TranslatedFunc func = translator.translate(code, tlbTable);
     do {
-        ctx->location = Location();
+        ctx->location = 0;
         func(ctx.get());
-        if (ctx->location != Location()) {
+        if (ctx->location) {
             // JIT translation requested
-            LOG("Retranslate at location: {}", ctx->location.description());
-            const Location failLocation = translator.calculateFailLocation(ctx->location);
+            const Location location = Location::unpack(ctx->location);
+            LOG("Retranslate at location: {}", location.description());
+            ASSERT(location.pack() == ctx->location)
+            const Location failLocation = translator.calculateFailLocation(location);
             const Location validFailLocation = translator.stepToValidLocation(failLocation);
             const auto it = entryTlbTable.find(validFailLocation);
             if (it != entryTlbTable.end()) {
@@ -32,9 +35,9 @@ Word Runtime::run(const std::u16string& code) {
                 entryTlbTable.emplace(validFailLocation, func);
             }
             ASSERT(tlbTable.find(validFailLocation) != tlbTable.end())
-            ctx->exhaustPatchTable->setValue(ctx->location.hash(), tlbTable[validFailLocation]);
+            ctx->exhaustPatchTable->setValue(location.hash(), tlbTable[validFailLocation]);
         }
-    } while (ctx->location != Location());
+    } while (ctx->location);
 
     if (ctx->storage == 0) {
         if (ctx->storageBuffer[0] != ctx->queueCursor) {
@@ -64,7 +67,7 @@ void Runtime::resetState() {
     ctx->queueFront = reinterpret_cast<uintptr_t>(storages[0]) + 8 * MAX_STORAGE_SIZE;
     ctx->queueCursor = reinterpret_cast<uintptr_t>(storages[0]) + (8 * MAX_STORAGE_SIZE / 2);
     ctx->storageBuffer[0] = reinterpret_cast<uintptr_t>(storages[0]) + (8 * MAX_STORAGE_SIZE / 2);
-    ctx->location = Location();
+    ctx->location = 0;
     for (int i = 1; i < storages.size(); ++i) {
         ctx->storageBuffer[i] = reinterpret_cast<uintptr_t>(storages[i]) + 8 * MAX_STORAGE_SIZE;
         ctx->stackFronts[i] = ctx->storageBuffer[i];

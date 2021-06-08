@@ -37,7 +37,8 @@ void Emitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBlock *>
     emitPrologue();
     std::stack<BasicBlock *> todo;
     std::set<uint64_t> done;
-    exit = code.newLabel();
+    exitLabel = code.newLabel();
+    jitRequestLabel = code.newLabel();
 
     if (table.find(bb->location) != table.end()) {
         code.jmp(table.at(bb->location));
@@ -85,7 +86,7 @@ void Emitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBlock *>
             case TerminalType::Exit:
                 regAlloc.emitDeinit();
                 regAlloc.reset();
-                code.jmp(exit);
+                code.jmp(exitLabel);
                 break;
             case TerminalType::Link: {
                 regAlloc.emitDeinit();
@@ -132,8 +133,9 @@ void Emitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBlock *>
             }
         }
     }
-    code.bind(exit);
+    code.bind(exitLabel);
     emitEpilouge();
+    emitSubroutines();
 }
 
 void Emitter::emitMethodCall(void *func, asmjit::x86::Gp arg0, asmjit::x86::Gp arg1) {
@@ -214,10 +216,14 @@ void Emitter::emitEpilouge() {
     code.ret();
 }
 
-void Emitter::emitJITRequest() {
+void Emitter::emitSubroutines() {
+    emitJITRequestImpl();
+}
+
+void Emitter::emitJITRequest(const Location &location) {
     regAlloc.emitDeinitStub();
     if (popFixup) {
-        if (inst->location.pointer.queue) {
+        if (location.pointer.queue) {
             x86::Mem cursorPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueCursor));
             code.mov(x86::rbx, cursorPtr);
             code.lea(x86::rbx, x86::ptr(x86::rbx, -8));
@@ -231,13 +237,21 @@ void Emitter::emitJITRequest() {
             code.mov(stackPtr, x86::rbx);
         }
     }
+    code.mov(x86::rbx, location.pack());
+    code.mov(x86::rdx, imm(location.hash()));
+    code.jmp(jitRequestLabel);
+}
+
+void Emitter::emitJITRequestImpl() {
+    // rdx: hash of location
+    // rbx: packed location
+    code.bind(jitRequestLabel);
     x86::Mem patchTable = x86::ptr(x86::rdi, offsetof(JITContext, exhaustPatchTable));
     code.mov(x86::rax, patchTable);
-    code.lea(x86::rax, x86::ptr(x86::rax, offsetof(JITHashTable, beans)));
-    code.mov(x86::rdx, imm(inst->location.hash()));
-    const uint64_t beanOffset = (inst->location.hash() & (HASH_TABLE_BEANS - 1))
-                                << HAST_TABLE_BEAN_SHIFT;
-    code.lea(x86::rax, x86::qword_ptr(x86::rax, beanOffset));
+    code.mov(x86::rcx, x86::rdx);
+    code.and_(x86::rcx, HASH_TABLE_BEANS - 1);
+    code.shl(x86::rcx, HAST_TABLE_BEAN_SHIFT);
+    code.lea(x86::rax, x86::ptr(x86::rax, x86::rcx, 0, offsetof(JITHashTable, beans)));
     code.xor_(x86::rcx, x86::rcx);
     const Label loopBegin = code.newLabel();
     const Label jitRequest = code.newLabel();
@@ -253,21 +267,9 @@ void Emitter::emitJITRequest() {
     code.jne(loopBegin);
     code.jmp(x86::r8);
     code.bind(jitRequest);
-    emitSetLocation(inst->location);
-    code.jmp(exit);
-}
-
-void Emitter::emitSetLocation(const Location &location) {
     x86::Mem locationPtr = x86::dword_ptr(x86::rdi, offsetof(JITContext, location));
-    code.mov(locationPtr, location.x);
-    locationPtr.addOffset(4);
-    code.mov(locationPtr, location.y);
-    locationPtr.addOffset(4);
-    code.mov(locationPtr, location.pointer.queue);
-    locationPtr.addOffset(4);
-    code.mov(locationPtr, location.pointer.vx);
-    locationPtr.addOffset(4);
-    code.mov(locationPtr, location.pointer.vy);
+    code.mov(locationPtr, x86::rbx);
+    code.jmp(exitLabel);
 }
 
 void Emitter::visit(Instruction *inst) {
@@ -379,7 +381,7 @@ void Emitter::popStack(Void *) {
     code.mov(stackPtr, stack.get());
     code.jmp(end);
     code.bind(die);
-    emitJITRequest();
+    emitJITRequest(inst->location);
     code.bind(end);
     popFixup = true;
 }
@@ -421,7 +423,7 @@ void Emitter::popQueue(Void *) {
     code.mov(queueCurosrPtr, queueCursor.get());
     code.jmp(end);
     code.bind(die);
-    emitJITRequest();
+    emitJITRequest(inst->location);
     code.bind(end);
     popFixup = true;
 }
