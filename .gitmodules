@@ -7,3 +7,6 @@ url=https://github.com/asmjit/asmjit.git
 [submodule "external/capstone"]
 	path = external/capstone
 	url = https://github.com/aquynh/capstone.git
+[submodule "tests/snippets"]
+	path = tests/snippets
+	url = https://github.com/aheui/snippets.git
