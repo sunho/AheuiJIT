@@ -226,14 +226,14 @@ void Emitter::emitJITRequest(const Location &location) {
     regAlloc.emitDeinitStub();
     if (popFixup) {
         if (location.pointer.queue) {
-            x86::Mem cursorPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueCursor));
-            code.mov(x86::rbx, cursorPtr);
-            code.lea(x86::rbx, x86::ptr(x86::rbx, -8));
-            code.mov(cursorPtr, x86::rbx);
+            x86::Mem queueBackPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueBack));
+            code.mov(x86::rbx, queueBackPtr);
+            code.sub(x86::rbx, 1);
+            code.and_(x86::rbx, MAX_STORAGE_SIZE - 1);
+            code.mov(queueBackPtr, x86::rbx);
         } else {
             code.mov(x86::rax, x86::ptr(x86::rdi, offsetof(JITContext, storage)));
-            x86::Mem stackPtr =
-                x86::ptr(x86::rdi, x86::rax, 3, offsetof(JITContext, storageBuffer));
+            x86::Mem stackPtr = x86::ptr(x86::rdi, x86::rax, 3, offsetof(JITContext, stackTops));
             code.mov(x86::rbx, stackPtr);
             code.lea(x86::rbx, x86::ptr(x86::rbx, -8));
             code.mov(stackPtr, x86::rbx);
@@ -357,7 +357,7 @@ void Emitter::pushStack(Value *value) {
     Reg store = regAlloc.allocTmp();
     Reg stack = regAlloc.allocTmp();
     code.mov(store.get().r32(), x86::ptr(x86::rdi, offsetof(JITContext, storage)));
-    x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, storageBuffer));
+    x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, stackTops));
     code.mov(stack.get(), stackPtr);
     code.lea(stack.get(), x86::ptr(stack.get(), -8));
     code.mov(x86::ptr(stack.get()), valueReg.get());
@@ -372,10 +372,10 @@ void Emitter::popStack(Void *) {
     Reg stack = regAlloc.allocTmp();
     Reg stackFront = regAlloc.allocTmp();
     code.mov(store.get().r32(), x86::ptr(x86::rdi, offsetof(JITContext, storage)));
-    x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, storageBuffer));
-    x86::Mem stackFrontPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, stackFronts));
+    x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, stackTops));
+    x86::Mem stackUpperPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(JITContext, stackUppers));
     code.mov(stack.get(), stackPtr);
-    code.mov(stackFront.get(), stackFrontPtr);
+    code.mov(stackFront.get(), stackUpperPtr);
     code.cmp(stack.get(), stackFront.get());
     code.je(die);
     code.mov(outputReg.get(), x86::ptr(stack.get()));
@@ -390,39 +390,50 @@ void Emitter::popStack(Void *) {
 
 void Emitter::pushQueueFront(Value *value) {
     Reg valueReg = unwrapValue(value);
-    x86::Mem queueCurosrPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueCursor));
-    Reg queueCursor = regAlloc.allocTmp();
-    code.mov(queueCursor.get(), queueCurosrPtr);
-    code.mov(x86::ptr(queueCursor.get()), valueReg.get());
-    code.lea(queueCursor.get(), x86::ptr(queueCursor.get(), 8));
-    code.mov(queueCurosrPtr, queueCursor.get());
+    x86::Mem queueBackPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueBack));
+    Reg queueBack = regAlloc.allocTmp();
+    Reg queueBuffer = regAlloc.allocTmp();
+    code.mov(queueBack.get(), queueBackPtr);
+    code.mov(queueBuffer.get(), x86::ptr(x86::rdi, offsetof(JITContext, queueBuffer)));
+    code.lea(queueBuffer.get(), x86::ptr(queueBuffer.get(), queueBack.get(), 3, 0));
+    code.mov(x86::ptr(queueBuffer.get()), valueReg.get());
+    code.sub(queueBack.get(), 1);
+    code.and_(queueBack.get(), MAX_STORAGE_SIZE - 1);
+    code.mov(queueBackPtr, queueBack.get());
 }
 
 void Emitter::pushQueueBack(Value *value) {
     Reg valueReg = unwrapValue(value);
-    x86::Mem queueBottomPtr = x86::ptr(x86::rdi, offsetof(JITContext, storageBuffer));
-    Reg queueBottom = regAlloc.allocTmp();
-    code.mov(queueBottom.get(), queueBottomPtr);
-    code.lea(queueBottom.get(), x86::ptr(queueBottom.get(), -8));
-    code.mov(x86::ptr(queueBottom.get()), valueReg.get());
-    code.mov(queueBottomPtr, queueBottom.get());
+    x86::Mem queueFrontPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueFront));
+    Reg queueFront = regAlloc.allocTmp();
+    Reg queueBuffer = regAlloc.allocTmp();
+    code.mov(queueFront.get(), queueFrontPtr);
+    code.mov(queueBuffer.get(), x86::ptr(x86::rdi, offsetof(JITContext, queueBuffer)));
+    code.lea(queueBuffer.get(), x86::ptr(queueBuffer.get(), queueFront.get(), 3, 0));
+    code.mov(x86::ptr(queueBuffer.get()), valueReg.get());
+    code.add(queueFront.get(), 1);
+    code.and_(queueFront.get(), MAX_STORAGE_SIZE - 1);
+    code.mov(queueFrontPtr, queueFront.get());
 }
 
 void Emitter::popQueue(Void *) {
     Label die = code.newLabel();
     Label end = code.newLabel();
     Reg outputReg = regAlloc.allocLocal(inst->output);
-    x86::Mem queueBottomPtr = x86::ptr(x86::rdi, offsetof(JITContext, storageBuffer));
-    x86::Mem queueCurosrPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueCursor));
-    Reg queueCursor = regAlloc.allocTmp();
-    Reg queueBottom = regAlloc.allocTmp();
-    code.mov(queueCursor.get(), queueCurosrPtr);
-    code.mov(queueBottom.get(), queueBottomPtr);
-    code.cmp(queueCursor.get(), queueBottom.get());
+    x86::Mem queueFrontPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueFront));
+    x86::Mem queueBackPtr = x86::ptr(x86::rdi, offsetof(JITContext, queueBack));
+    Reg queueFront = regAlloc.allocTmp();
+    Reg queueBack = regAlloc.allocTmp();
+    Reg queueBuffer = regAlloc.allocTmp();
+    code.mov(queueFront.get(), queueFrontPtr);
+    code.mov(queueBack.get(), queueBackPtr);
+    code.add(queueBack.get(), 1);
+    code.and_(queueBack.get(), MAX_STORAGE_SIZE - 1);
+    code.cmp(queueFront.get(), queueBack.get());
     code.je(die);
-    code.lea(queueCursor.get(), x86::ptr(queueCursor.get(), -8));
-    code.mov(outputReg.get(), x86::ptr(queueCursor.get()));
-    code.mov(queueCurosrPtr, queueCursor.get());
+    code.mov(queueBuffer.get(), x86::ptr(x86::rdi, offsetof(JITContext, queueBuffer)));
+    code.mov(outputReg.get(), x86::ptr(queueBuffer.get(), queueBack.get(), 3, 0));
+    code.mov(queueBackPtr, queueBack.get());
     code.jmp(end);
     code.bind(die);
     emitJITRequest(inst->location);

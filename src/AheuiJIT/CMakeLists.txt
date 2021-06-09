@@ -17,6 +17,8 @@ set(SOURCE_LIST
     IR/Pass/AggregatePushPopPass.cpp
     IR/Pass/ConstantFoldPass.cpp
     Runtime/JITContext.h
+    Runtime/IOProtocol.h
+    Runtime/IOProtocol.cpp
     Runtime/Runtime.h
     Runtime/Runtime.cpp
     Translator/Decoder.cpp

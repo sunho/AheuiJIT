@@ -2,6 +2,8 @@
 
 namespace aheuijit {
 
+constexpr int QUEUE_STORAGE_IMM = 53;
+
 struct Storage {
     explicit Storage(bool stack, int num) : stack(stack), num(num) {
     }
@@ -9,7 +11,9 @@ struct Storage {
     ~Storage() = default;
 
     int toImm() const {
-        return !stack ? 0 : num + 1;
+        if (!stack)
+            return QUEUE_STORAGE_IMM;
+        return num;
     }
 
     bool stack{ false };

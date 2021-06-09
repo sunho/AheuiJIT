@@ -13,6 +13,12 @@ bool EndpointPass::runOnBlock(Builder& b, BasicBlock* block) {
             }
         }
     }
+    if (block->terminal->getType() == TerminalType::Conditional) {
+        ConditionalTerminal* term = dynamic_cast<ConditionalTerminal*>(block->terminal);
+        if (term->predicate->type() == ValueType::Local) {
+            dynamic_cast<Local*>(term->predicate)->endpoint = ~0U;
+        }
+    }
     return true;
 }
 
@@ -32,15 +38,10 @@ static bool isNoSideEffectOp(Opcode op) {
 }
 
 bool RemoveDeadAssignmentPass::runOnBlock(Builder& b, BasicBlock* block) {
-    Value* pred = nullptr;
-    if (block->terminal->getType() == TerminalType::Conditional) {
-        ConditionalTerminal* term = dynamic_cast<ConditionalTerminal*>(block->terminal);
-        pred = term->predicate;
-    }
     for (auto it = block->insts.begin(); it != block->insts.end();) {
         const Instruction* inst = *it;
         const Local* output = inst->output;
-        if (output && !output->endpoint && isNoSideEffectOp(inst->opcode) && output != pred) {
+        if (output && !output->endpoint && isNoSideEffectOp(inst->opcode)) {
             block->insts.erase(it++);
             continue;
         }

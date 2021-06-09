@@ -252,7 +252,7 @@ Location Translator::addLocationX(const Location &location, int val) {
         out.x = codeWidth[out.y] + out.x;
     }
     if (out.x >= codeWidth[out.y]) {
-        out.x = cur.x - codeWidth[out.y];
+        out.x = out.x - codeWidth[out.y];
     }
     return out;
 }

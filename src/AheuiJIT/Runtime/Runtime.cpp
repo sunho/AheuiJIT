@@ -8,7 +8,8 @@
 
 using namespace aheuijit;
 
-Runtime::Runtime() : ctx(std::make_unique<JITContext>()), translator(*this) {
+Runtime::Runtime(std::unique_ptr<IOProtocol> io)
+    : io(std::move(io)), ctx(std::make_unique<JITContext>()), translator(*this) {
     storages.fill(0);
 }
 
@@ -38,13 +39,14 @@ Word Runtime::run(const std::u16string& code) {
         }
     } while (ctx->location);
 
-    if (ctx->storage == 0) {
-        if (ctx->storageBuffer[0] != ctx->queueCursor) {
-            return *reinterpret_cast<Word*>(ctx->queueCursor);
+    if (ctx->storage == QUEUE_STORAGE_IMM) {
+        if (ctx->queueFront != ctx->queueBack) {
+            return reinterpret_cast<Word*>(
+                ctx->queueBuffer)[(ctx->queueBack + 1) & (MAX_STORAGE_SIZE - 1)];
         }
     } else {
-        if (ctx->storageBuffer[ctx->storage] != ctx->stackFronts[ctx->storage]) {
-            return *reinterpret_cast<Word*>(ctx->storageBuffer[ctx->storage]);
+        if (ctx->stackTops[ctx->storage] != ctx->stackUppers[ctx->storage]) {
+            return *reinterpret_cast<Word*>(ctx->stackTops[ctx->storage]);
         }
     }
     return 0;
@@ -55,51 +57,51 @@ void Runtime::resetState() {
         if (storages[i]) {
             delete[] storages[i];
         }
-        storages[i] = new uint64_t[MAX_STORAGE_SIZE];
+        storages[i] = new (std::align_val_t(64)) uint64_t[MAX_STORAGE_SIZE];
     }
     if (ctx->exhaustPatchTable) {
         delete ctx->exhaustPatchTable;
     }
     ctx->exhaustPatchTable = new JITHashTable;
     ctx->runtime = this;
-    ctx->queueBack = reinterpret_cast<uintptr_t>(storages[0]);
-    ctx->queueFront = reinterpret_cast<uintptr_t>(storages[0]) + 8 * MAX_STORAGE_SIZE;
-    ctx->queueCursor = reinterpret_cast<uintptr_t>(storages[0]) + (8 * MAX_STORAGE_SIZE / 2);
-    ctx->storageBuffer[0] = reinterpret_cast<uintptr_t>(storages[0]) + (8 * MAX_STORAGE_SIZE / 2);
+    ctx->queueBuffer = reinterpret_cast<uintptr_t>(storages[0]);
+    ctx->queueFront = 0;
+    ctx->queueBack = MAX_STORAGE_SIZE - 1;
     ctx->location = 0;
-    for (int i = 1; i < storages.size(); ++i) {
-        ctx->storageBuffer[i] = reinterpret_cast<uintptr_t>(storages[i]) + 8 * MAX_STORAGE_SIZE;
-        ctx->stackFronts[i] = ctx->storageBuffer[i];
+    for (int i = 0; i < ctx->stackTops.size(); ++i) {
+        ctx->stackTops[i] = reinterpret_cast<uintptr_t>(storages[i + 1]) + 8 * MAX_STORAGE_SIZE;
+        ctx->stackUppers[i] = ctx->stackTops[i];
     }
-    ctx->storage = 1;
+    ctx->storage = 0;
     tlbTable.clear();
     entryTlbTable.clear();
 }
 
 void Runtime::printNum(Word word) {
-    printf("%lld", word);
+    io->printNum(word);
 }
 
 Word Runtime::inputNum() {
-    Word word;
-    std::cin >> word;
-    return word;
+    return io->inputNum();
 }
 
 // https://github.com/aheui/caheui/blob/master/aheui.c#L113
 
 Word Runtime::inputChar() {
-    Word a = getchar();
+    Word a = io->inputChar();
+    if (a == -1) {
+        return -1;
+    }
 
     if (a < 0x80) {
         return a;
     } else if ((a & 0xf0) == 0xf0) {
-        return ((a & 0x07) << 18) + ((getchar() & 0x3f) << 12) + ((getchar() & 0x3f) << 6) +
-               (getchar() & 0x3f);
+        return ((a & 0x07) << 18) + ((io->inputChar() & 0x3f) << 12) +
+               ((io->inputChar() & 0x3f) << 6) + (io->inputChar() & 0x3f);
     } else if ((a & 0xe0) == 0xe0) {
-        return ((a & 0x0f) << 12) + ((getchar() & 0x3f) << 6) + (getchar() & 0x3f);
+        return ((a & 0x0f) << 12) + ((io->inputChar() & 0x3f) << 6) + (io->inputChar() & 0x3f);
     } else if ((a & 0xc0) == 0xc0) {
-        return ((a & 0x1f) << 6) + (getchar() & 0x3f);
+        return ((a & 0x1f) << 6) + (io->inputChar() & 0x3f);
     } else {
         return -1;
     }
@@ -107,18 +109,18 @@ Word Runtime::inputChar() {
 
 void Runtime::printChar(Word word) {
     if (word < 0x80) {
-        putchar(word);
+        io->printChar(word);
     } else if (word < 0x0800) {
-        putchar(0xc0 | (word >> 6));
-        putchar(0x80 | ((word >> 0) & 0x3f));
+        io->printChar(0xc0 | (word >> 6));
+        io->printChar(0x80 | ((word >> 0) & 0x3f));
     } else if (word < 0x10000) {
-        putchar(0xe0 | (word >> 12));
-        putchar(0x80 | ((word >> 6) & 0x3f));
-        putchar(0x80 | ((word >> 0) & 0x3f));
+        io->printChar(0xe0 | (word >> 12));
+        io->printChar(0x80 | ((word >> 6) & 0x3f));
+        io->printChar(0x80 | ((word >> 0) & 0x3f));
     } else if (word < 0x110000) {
-        putchar(0xf0 | (word >> 18));
-        putchar(0x80 | ((word >> 12) & 0x3f));
-        putchar(0x80 | ((word >> 6) & 0x3f));
-        putchar(0x80 | ((word >> 0) & 0x3f));
+        io->printChar(0xf0 | (word >> 18));
+        io->printChar(0x80 | ((word >> 12) & 0x3f));
+        io->printChar(0x80 | ((word >> 6) & 0x3f));
+        io->printChar(0x80 | ((word >> 0) & 0x3f));
     }
 }

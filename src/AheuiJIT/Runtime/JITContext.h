@@ -43,19 +43,19 @@ struct JITHashTable {
 
 struct JITContext {
     JITContext() {
-        storageBuffer.fill(0);
-        stackFronts.fill(0);
+        stackUppers.fill(0);
+        stackTops.fill(0);
     };
     ~JITContext() = default;
 
     Runtime* runtime{ nullptr };
     uint64_t location{ 0 };
     int storage{ 0 };
-    std::array<uint64_t, 27> stackFronts;
-    uint64_t queueFront{ 0 };
+    uint64_t queueBuffer{ 0 };
     uint64_t queueBack{ 0 };
-    uint64_t queueCursor{ 0 };
-    std::array<uint64_t, 27> storageBuffer;  // [0] = queueTop
+    uint64_t queueFront{ 0 };
+    std::array<uint64_t, 26> stackUppers;
+    std::array<uint64_t, 26> stackTops;
     JITHashTable* exhaustPatchTable{ nullptr };
 };
 

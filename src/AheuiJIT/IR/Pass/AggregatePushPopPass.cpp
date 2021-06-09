@@ -36,26 +36,22 @@ bool AggregatePushPopPass::runOnBlock(Builder& b, BasicBlock* block) {
 
     counts.fill(0);
 
-    Value* getStorageMatch = nullptr;
+    std::map<Value*, int> storageMatches;
     int getStorageRes = 0;
     for (auto inst : block->insts) {
         switch (inst->opcode) {
             case Opcode::setStore: {
                 // setStore(getStore())
-                if (getStorageMatch && inst->args[0]->type() == ValueType::Local) {
-                    trackedStorage = getStorageRes;
-                    getStorageMatch = nullptr;
+                if (inst->args[0]->type() == ValueType::Local) {
+                    trackedStorage = storageMatches.at(inst->args[0]);
                 } else {
                     const uint32_t newStorage = dynamic_cast<Constant*>(inst->args[0])->imm;
-                    if (newStorage != 0)  // is not queue
-                        trackedStorage = newStorage - 1;
+                    trackedStorage = newStorage;
                 }
-                ASSERT(trackedStorage < 27)
                 break;
             }
             case Opcode::getStore: {
-                getStorageRes = trackedStorage;
-                getStorageMatch = inst->output;
+                storageMatches.emplace(inst->output, trackedStorage);
                 break;
             }
             case Opcode::pushStack: {

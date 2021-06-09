@@ -1,13 +1,14 @@
 #pragma once
+#include <AheuiJIT/Runtime/IOProtocol.h>
 #include <AheuiJIT/Runtime/JITContext.h>
 #include <AheuiJIT/Translator/Translator.h>
 
 namespace aheuijit {
 
-constexpr int MAX_STORAGE_SIZE = 2048;
+constexpr int MAX_STORAGE_SIZE = 4096;
 
 struct Runtime {
-    Runtime();
+    Runtime(std::unique_ptr<IOProtocol> io);
     ~Runtime() = default;
 
     Word run(const std::u16string& code);
@@ -25,6 +26,7 @@ struct Runtime {
     std::map<Location, TranslatedFunc> entryTlbTable;
     TLBTable tlbTable;
     std::array<uint64_t*, 27> storages;
+    std::unique_ptr<IOProtocol> io;
 };
 
 }  // namespace aheuijit
