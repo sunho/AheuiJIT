@@ -1,5 +1,10 @@
 #include "Translator.h"
 
+#ifdef __EMSCRIPTEN__
+#include <AheuiJIT/Translator/Wasm/WasmEmitter.h>
+#else
+#include <AheuiJIT/Translator/X86/X86Emitter.h>
+#endif
 #include <AheuiJIT/IR/Builder.h>
 #include <AheuiJIT/Translator/Emitter.h>
 #include <AheuiJIT/Util/Disasm.h>
@@ -10,37 +15,21 @@
 #include <iostream>
 #include <stack>
 
-using namespace asmjit;
 using namespace aheuijit;
 
-IRBuffer::IRBuffer() {
+#ifdef __EMSCRIPTEN__
+static std::unique_ptr<Emitter> createEmitterImpl(CodeBlock *block) {
+    WasmCodeBlock *wasmblock = dynamic_cast<WasmCodeBlock *>(block);
+    return std::make_unique<WasmEmitter>(wasmblock->getModule());
 }
-
-BasicBlock *IRBuffer::createBlock(const Location &location) {
-    auto block = std::make_unique<BasicBlock>(nextId++);
-    BasicBlock *out = block.get();
-    blocks.emplace(location, std::move(block));
-    return out;
+#else
+static std::unique_ptr<Emitter> createEmitterImpl(CodeBlock *block) {
+    X86CodeBlock *x86block = dynamic_cast<X86CodeBlock *>(block);
+    return std::make_unique<X86Emitter>(x86block->getAssembler());
 }
+#endif
 
-BasicBlock *IRBuffer::findBlock(const Location &location) {
-    const auto it = blocks.find(location);
-    if (it == blocks.end())
-        return nullptr;
-    return it->second.get();
-}
-
-void IRBuffer::print() {
-    const auto block = findBlock(DEFAULT_LOCATION);
-    fmt::print("{}\n", block->description());
-}
-
-void IRBuffer::reset() {
-    blocks.clear();
-}
-
-Translator::Translator(Runtime &rt)
-    : parent(rt), rt(new asmjit::JitRuntime, [](asmjit::JitRuntime *rt) { delete rt; }) {
+Translator::Translator(Machine &machine) : machine(machine) {
     passManager.addBasicBlockPass(std::make_unique<AggregatePushPopPass>());
     passManager.addBasicBlockPass(std::make_unique<RemoveDeadStoreUpdate>());
     passManager.addBasicBlockPass(std::make_unique<ConstantFoldPass>());
@@ -121,7 +110,27 @@ inline char16_t &Translator::getCode(int y, int x) {
     return this->code[codeStride * y + x];
 }
 
-void Translator::buildBlocks(const Location &location) {
+Location Translator::calculateFailLocation(const Location &location) {
+    Location out = location;
+    const Token token = parseChar(getCode(location));
+    out = updateLocationPointer(out, token.dir);
+    out.pointer.flip();
+    return stepLocation(out);
+}
+
+void Translator::setConfig(const RuntimeConfig &conf) {
+    this->conf = conf;
+}
+
+Location Translator::stepToValidLocation(const Location &location) {
+    Location out = location;
+    while (isBlank(getCode(out))) {
+        out = stepLocation(out);
+    }
+    return out;
+}
+
+void Translator::translate(const Location &location, IRBuffer &irBuffer) {
     std::stack<std::tuple<Location, BasicBlock **>> trStack;
     trStack.push(std::make_tuple(location, nullptr));
 
@@ -179,7 +188,9 @@ void Translator::buildBlocks(const Location &location) {
             LinkTerminal *term = dynamic_cast<LinkTerminal *>(bb->terminal);
             trStack.push(std::make_tuple(cur, &term->block));
         }
-        passManager.doBasicBlockPass(b, bb);
+        if (conf.optIR) {
+            passManager.doBasicBlockPass(b, bb);
+        }
 
         if (label_) {
             *label_ = bb;
@@ -187,59 +198,14 @@ void Translator::buildBlocks(const Location &location) {
     }
 }
 
-Location Translator::calculateFailLocation(const Location &location) {
-    Location out = location;
-    const Token token = parseChar(getCode(location));
-    out = updateLocationPointer(out, token.dir);
-    out.pointer.flip();
-    return stepLocation(out);
-}
-
-IRBuffer &Translator::debugIR(const std::u16string &code_) {
-    setCode(code_);
-    buildBlocks(DEFAULT_LOCATION);
-    return irBuffer;
-}
-
-TranslatedFunc Translator::translate(const std::u16string &code_, TLBTable &table) {
-    irBuffer.reset();
-    setCode(code_);
-    return translate(stepToValidLocation(DEFAULT_LOCATION), table);
-}
-
-Location Translator::stepToValidLocation(const Location &location) {
-    Location out = location;
-    while (isBlank(getCode(out))) {
-        out = stepLocation(out);
-    }
-    return out;
-}
-
-TranslatedFunc Translator::translate(const Location &location, TLBTable &table) {
-    buildBlocks(location);
-
-    CodeHolder codeHolder;
-    codeHolder.init(rt->environment());
-    x86::Assembler codeAsm(&codeHolder);
-
-    Emitter emitter(parent, codeAsm);
+void Translator::emit(const Location &location, IRBuffer &irBuffer) {
+    CodeBlockPtr codeblock = machine.createBlock();
+    std::unique_ptr<Emitter> emitter = createEmitterImpl(codeblock.get());
+    emitter->setConfig(conf);
     const auto block = irBuffer.findBlock(location);
     std::set<BasicBlock *> emitted;
-    emitter.emit(block, table, emitted);
-    TranslatedFunc func;
-    Error error = rt->add(&func, &codeHolder);
-    ASSERT(!error)
-
-    for (auto b : emitted) {
-        const auto labelId = codeHolder.labelIdByName(std::to_string(b->id).c_str());
-        table.emplace(b->location,
-                      reinterpret_cast<uint64_t>(func) + codeHolder.labelOffset(labelId));
-    }
-
-#ifdef AHEUI_JIT_LOG
-    disassembleX86((void *)func, codeHolder.codeSize());
-#endif
-    return func;
+    emitter->emit(block, machine.tlbTable, emitted);
+    machine.addCodeBlock(location, codeblock.get(), emitted);
 }
 
 Location Translator::addLocationX(const Location &location, int val) {

@@ -8,41 +8,71 @@
 
 using namespace aheuijit;
 
-Runtime::Runtime(std::unique_ptr<IOProtocol> io)
-    : io(std::move(io)), ctx(std::make_unique<JITContext>()), translator(*this) {
+Runtime::Runtime(std::unique_ptr<Machine> machine)
+    : machine(std::move(machine))
+    , ctx(std::move(std::make_unique<RuntimeContext>()))
+    , translator(*this->machine) {
     storages.fill(0);
+    setConfig(conf);
+}
+
+void Runtime::setConfig(RuntimeConfig conf) {
+    this->conf = conf;
+    translator.setConfig(conf);
+    interpreter.setConfig(conf);
+    machine->setConfig(conf);
+}
+
+RuntimeConfig Runtime::getConfig() {
+    return conf;
 }
 
 Word Runtime::run(const std::u16string& code) {
     resetState();
-
-    TranslatedFunc func = translator.translate(code, tlbTable);
+    irBuffer.reset();
+    Location pc = DEFAULT_LOCATION;
+    remainInterpretCycle = conf.numInterpretCycle;
+    translator.setCode(code);
+    translator.translate(pc, irBuffer);
     do {
         ctx->location = 0;
-        func(ctx.get());
+        if (remainInterpretCycle) {
+            pc = interpreter.run(pc, ctx.get(), irBuffer, remainInterpretCycle);
+            if (pc == Location()) {
+                break;
+            }
+        }
+        if (!remainInterpretCycle && !ctx->location) {
+            if (!machine->hasCodeBlock(pc)) {
+                translator.emit(pc, irBuffer);
+            }
+            machine->runCodeBlock(pc, ctx.get());
+        }
         if (ctx->location) {
-            // JIT translation requested
             const Location location = Location::unpack(ctx->location);
-            LOG("Retranslate at location: {}", location.description());
-            ASSERT(location.pack() == ctx->location)
             const Location failLocation = translator.calculateFailLocation(location);
             const Location validFailLocation = translator.stepToValidLocation(failLocation);
-            const auto it = entryTlbTable.find(validFailLocation);
-            if (it != entryTlbTable.end()) {
-                func = reinterpret_cast<TranslatedFunc>(it->second);
-            } else {
-                func = translator.translate(validFailLocation, tlbTable);
-                entryTlbTable.emplace(validFailLocation, func);
+            if (conf.interpretAfterFail) {
+                remainInterpretCycle = conf.numInterpretCycle;
             }
-            ASSERT(tlbTable.find(validFailLocation) != tlbTable.end())
-            ctx->exhaustPatchTable->setValue(location.hash(), tlbTable[validFailLocation]);
+            if (!irBuffer.findBlock(validFailLocation)) {
+                translator.translate(validFailLocation, irBuffer);
+                if (!remainInterpretCycle) {
+                    translator.emit(validFailLocation, irBuffer);
+#ifndef __EMSCRIPTEN__
+                    ctx->exhaustPatchTable->setValue(location.hash(),
+                                                     machine->tlbTable[validFailLocation]);
+#endif
+                }
+            }
+            pc = validFailLocation;
         }
     } while (ctx->location);
 
     if (ctx->storage == QUEUE_STORAGE_IMM) {
         if (ctx->queueFront != ctx->queueBack) {
             return reinterpret_cast<Word*>(
-                ctx->queueBuffer)[(ctx->queueBack + 1) & (MAX_STORAGE_SIZE - 1)];
+                ctx->queueBuffer)[(ctx->queueBack + 1) & (conf.maxStorageSize - 1)];
         }
     } else {
         if (ctx->stackTops[ctx->storage] != ctx->stackUppers[ctx->storage]) {
@@ -57,70 +87,24 @@ void Runtime::resetState() {
         if (storages[i]) {
             delete[] storages[i];
         }
-        storages[i] = new (std::align_val_t(64)) uint64_t[MAX_STORAGE_SIZE];
+        storages[i] = new uint64_t[conf.maxStorageSize];
     }
     if (ctx->exhaustPatchTable) {
         delete ctx->exhaustPatchTable;
     }
+#ifndef __EMSCRIPTEN__
     ctx->exhaustPatchTable = new JITHashTable;
+#endif
+    ctx->machine = machine.get();
     ctx->runtime = this;
     ctx->queueBuffer = reinterpret_cast<uintptr_t>(storages[0]);
     ctx->queueFront = 0;
-    ctx->queueBack = MAX_STORAGE_SIZE - 1;
+    ctx->queueBack = conf.maxStorageSize - 1;
     ctx->location = 0;
     for (int i = 0; i < ctx->stackTops.size(); ++i) {
-        ctx->stackTops[i] = reinterpret_cast<uintptr_t>(storages[i + 1]) + 8 * MAX_STORAGE_SIZE;
+        ctx->stackTops[i] = reinterpret_cast<uintptr_t>(storages[i + 1]) + 8 * conf.maxStorageSize;
         ctx->stackUppers[i] = ctx->stackTops[i];
     }
     ctx->storage = 0;
-    tlbTable.clear();
     entryTlbTable.clear();
-}
-
-void Runtime::printNum(Word word) {
-    io->printNum(word);
-}
-
-Word Runtime::inputNum() {
-    return io->inputNum();
-}
-
-// https://github.com/aheui/caheui/blob/master/aheui.c#L113
-
-Word Runtime::inputChar() {
-    Word a = io->inputChar();
-    if (a == -1) {
-        return -1;
-    }
-
-    if (a < 0x80) {
-        return a;
-    } else if ((a & 0xf0) == 0xf0) {
-        return ((a & 0x07) << 18) + ((io->inputChar() & 0x3f) << 12) +
-               ((io->inputChar() & 0x3f) << 6) + (io->inputChar() & 0x3f);
-    } else if ((a & 0xe0) == 0xe0) {
-        return ((a & 0x0f) << 12) + ((io->inputChar() & 0x3f) << 6) + (io->inputChar() & 0x3f);
-    } else if ((a & 0xc0) == 0xc0) {
-        return ((a & 0x1f) << 6) + (io->inputChar() & 0x3f);
-    } else {
-        return -1;
-    }
-}
-
-void Runtime::printChar(Word word) {
-    if (word < 0x80) {
-        io->printChar(word);
-    } else if (word < 0x0800) {
-        io->printChar(0xc0 | (word >> 6));
-        io->printChar(0x80 | ((word >> 0) & 0x3f));
-    } else if (word < 0x10000) {
-        io->printChar(0xe0 | (word >> 12));
-        io->printChar(0x80 | ((word >> 6) & 0x3f));
-        io->printChar(0x80 | ((word >> 0) & 0x3f));
-    } else if (word < 0x110000) {
-        io->printChar(0xf0 | (word >> 18));
-        io->printChar(0x80 | ((word >> 12) & 0x3f));
-        io->printChar(0x80 | ((word >> 6) & 0x3f));
-        io->printChar(0x80 | ((word >> 0) & 0x3f));
-    }
 }

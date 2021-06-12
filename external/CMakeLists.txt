@@ -1,5 +1,11 @@
 
-SET(ASMJIT_STATIC ON CACHE BOOL "" FORCE)
+if (EMSCRIPTEN)
+set(BUILD_STATIC_LIB ON CACHE BOOL "" FORCE)
+add_subdirectory(binaryen EXCLUDE_FROM_ALL)
+add_subdirectory(fmt EXCLUDE_FROM_ALL)
+set(binaryen_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/binaryen/src" PARENT_SCOPE)
+else()
+set(ASMJIT_STATIC ON CACHE BOOL "" FORCE)
 add_subdirectory(asmjit EXCLUDE_FROM_ALL)
 add_subdirectory(fmt EXCLUDE_FROM_ALL)
 
@@ -10,3 +16,4 @@ option(CAPSTONE_ARCHITECTURE_DEFAULT "Whether architectures are enabled by defau
 option(CAPSTONE_X86_SUPPORT "x86 support" ON)
 add_subdirectory(capstone EXCLUDE_FROM_ALL)
 set(capstone_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/capstone/include" PARENT_SCOPE)
+endif()

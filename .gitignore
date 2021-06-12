@@ -1,2 +1,10 @@
 /build
+/build2
+/wasm
+/index.html
+/example.js
 /.vscode
+/pkg
+.npmrc
+.cache
+node_modules

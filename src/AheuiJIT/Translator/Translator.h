@@ -2,6 +2,8 @@
 #include <AheuiJIT/IR/BasicBlock.h>
 #include <AheuiJIT/IR/Builder.h>
 #include <AheuiJIT/IR/Pass/Pass.h>
+#include <AheuiJIT/Runtime/IRBuffer.h>
+#include <AheuiJIT/Runtime/Machine.h>
 #include <AheuiJIT/Translator/Token.h>
 
 #include <clocale>
@@ -12,34 +14,11 @@
 #include <string>
 #include <vector>
 
-namespace asmjit {
-class JitRuntime;
-}
-
 namespace aheuijit {
 
 struct Runtime;
-struct JITContext;
+struct RuntimeContext;
 struct Builder;
-
-using TLBTable = std::map<Location, uint64_t>;
-using TranslatedFunc = void (*)(JITContext *ctx);
-using BasicBlockPtr = std::unique_ptr<BasicBlock>;
-
-struct IRBuffer {
-    IRBuffer();
-    ~IRBuffer() = default;
-
-    BasicBlock *findBlock(const Location &location);
-    BasicBlock *createBlock(const Location &location);
-
-    void print();
-    void reset();
-
-  private:
-    uint64_t nextId = 1;
-    std::map<Location, BasicBlockPtr> blocks;
-};
 
 struct PassManager {
     PassManager() {
@@ -61,16 +40,18 @@ struct PassManager {
     std::list<std::unique_ptr<BasicBlockPass>> basicBlockPasses;
 };
 
-using AsmJitRuntimePtr =
-    std::unique_ptr<asmjit::JitRuntime, std::function<void(asmjit::JitRuntime *)>>;
+using TLBTable = std::map<Location, uint64_t>;
 
 struct Translator {
-    Translator(Runtime &rt);
+    Translator(Machine &machine);
     ~Translator() = default;
 
-    TranslatedFunc translate(const std::u16string &code, TLBTable &table);
-    TranslatedFunc translate(const Location &location, TLBTable &table);
-    IRBuffer &debugIR(const std::u16string &code);
+    void setCode(const std::u16string &code);
+
+    void translate(const Location &location, IRBuffer &irBuffer);
+    void emit(const Location &location, IRBuffer &irBuffer);
+
+    void setConfig(const RuntimeConfig &conf);
 
     static Token parseChar(const char16_t &ch);
 
@@ -87,20 +68,18 @@ struct Translator {
 #include "TokenOp.inc"
 #undef OP
     void buildBlocks(const Location &location);
-    void setCode(const std::u16string &code);
     inline char16_t &getCode(int x, int y);
     inline char16_t &getCode(const Location &location);
     inline bool isBlank(char16_t ch);
 
+    Machine &machine;
     PassManager passManager;
-    Runtime &parent;
-    IRBuffer irBuffer;
+    RuntimeConfig conf;
     Location cur;
     size_t codeStride{ 0 };
     size_t codeHeight{ 0 };
     std::vector<size_t> codeWidth;
     std::vector<char16_t> code;
-    AsmJitRuntimePtr rt;
 };
 
 }  // namespace aheuijit

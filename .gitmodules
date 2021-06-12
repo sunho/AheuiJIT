@@ -10,3 +10,6 @@ url=https://github.com/asmjit/asmjit.git
 [submodule "tests/snippets"]
 	path = tests/snippets
 	url = https://github.com/aheui/snippets.git
+[submodule "external/binaryen"]
+	path = external/binaryen
+	url = https://github.com/WebAssembly/binaryen.git

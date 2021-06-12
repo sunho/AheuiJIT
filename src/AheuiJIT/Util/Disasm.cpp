@@ -1,5 +1,9 @@
 #include "Disasm.h"
 
+#ifdef __EMSCRIPTEN__
+
+#else
+
 #include <capstone/capstone.h>
 #include <fmt/printf.h>
 
@@ -20,3 +24,5 @@ void aheuijit::disassembleX86(void *buf, size_t size) {
         }
     }
 }
+
+#endif

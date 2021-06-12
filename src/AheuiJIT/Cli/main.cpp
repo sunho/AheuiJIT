@@ -18,7 +18,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    aheuijit::Runtime rt(std::make_unique<aheuijit::StdIOProtocol>());
+    aheuijit::Runtime rt(aheuijit::creataeStdioMachine());
     std::string str = readFile(argv[1]);
     std::u16string codecode = aheuijit::covnert_utf8_to_utf16(str);
     return rt.run(codecode);
