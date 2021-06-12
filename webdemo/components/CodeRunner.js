@@ -25,7 +25,7 @@ class StdoutBuffer {
 
   update() {
     if (this.buffer.length > this.page * PAGE_SIZE) {
-      this.onFlush(this.buffer);
+      //this.onFlush(this.buffer);
       this.page ++;
     }
   }

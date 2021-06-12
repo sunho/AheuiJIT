@@ -19,7 +19,6 @@ function Config() {
   const [interpretAfterFail, setinterpretAfterFail] = useState(true);
 
   useEffect(() => {
-      console.log("adssd");
     AheuiJIT.config.logIR = logIR;
     AheuiJIT.config.logDisasm = logDisasm;
     AheuiJIT.config.optIR = optIR;
