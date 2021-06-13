@@ -109,7 +109,10 @@ function useInput({ className, defaultValue }) {
   return [value, input, setValue];
 }
 
+let runn = false;
+
 function CodeRunner() {
+  const [running, setRunning] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [out, setOut] = useState('');
   const [code, codeInput, setCodeInput] = useInput({ className: "Code", defaultValue: "밤밣따빠밣밟따뿌\n빠맣파빨받밤뚜뭏\n돋밬탕빠맣붏두붇\n볻뫃박발뚷투뭏붖\n뫃도뫃희멓뭏뭏붘\n뫃봌토범더벌뿌뚜\n뽑뽀멓멓더벓뻐뚠\n뽀덩벐멓뻐덕더벅" });
@@ -141,14 +144,19 @@ function CodeRunner() {
         </div>
       </div>
       <div>
-      <div className="RunButton" onClick={() => { 
-        if (!isReady || code.length === 0)
+      <div className={!running ? "RunButton" : "RunningButton"} onClick={() => { 
+        if (!isReady || code.length === 0 || runn)
           return;
+        runn = true;
+        setRunning(true);
         stdin.setBuffer(input);
         AheuiJIT.run(code).then(() => {
           stdio.flush();
+          setRunning(false);
+          runn = false;
         });
-       }}>RUN</div>
+       }}>{running ? "RUNNING" : "RUN"}</div>
+      
        </div>
       <div className="Out">{out}</div>
 
