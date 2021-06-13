@@ -7,7 +7,7 @@
 ## 지원 환경
 
 - 64비트 windows, mac, linux (x86 아키텍쳐)
-- 웹어셈블리를 지원하는 웹 브라우저 및 nodejs ([웹 데모](https://sunho.github.io/AheuiJIT))
+- 웹어셈블리를 지원하는 웹 브라우저 및 nodejs ([웹 데모](https://sunho.io/AheuiJIT))
 
 ## 완성도
 
@@ -73,3 +73,7 @@ cmake ..
 ```
 
 웹어셈블리 버전은 cmake .. 대신 emcmake cmake .. 을 사용하시면 됩니다.
+
+## Brief English introduction
+
+AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedocs.io/en/latest/specs.en.html) built from scratch. Its design is inspired by LLVM and dynarmic project.
