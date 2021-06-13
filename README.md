@@ -1,9 +1,5 @@
 # 아희짓
 
-## Brief English introduction
-
-AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedocs.io/en/latest/specs.en.html) built from scratch. Its design is inspired by LLVM and dynarmic project.
-
 ## 개요
 
 아희짓은 [아희 언어](https://aheui.readthedocs.io/en/latest/introduction.html)를 위한 JIT (Just in Time) 컴파일러입니다. 어셈블러와 유틸 라이브러리외에 외부 라이브러리에 전혀 의존하지 않고 JIT을 바닥부터 구현합니다. 
@@ -11,22 +7,18 @@ AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedo
 ## 지원 환경
 
 - 64비트 windows, mac, linux (x86 아키텍쳐)
-- 웹어셈블리를 지원하는 웹 브라우저 및 nodejs
+- 웹어셈블리를 지원하는 웹 브라우저 및 nodejs ([웹 데모](https://sunho.github.io/AheuiJIT))
 
 ## 완성도
 
 - [아희 테스트 케이스](https://github.com/aheui/snippets) 중 64 비트 정수 최대값 출력을 제외한 모든 테스트를 통과합니다.
-
-    특히 저장소의 원소를 모두 소모하면 반대로 가는 스펙을 제대로 구현합니다.
+    - 특히 저장소의 원소를 모두 소모하면 반대로 가는 스펙을 제대로 구현합니다.
 - 아희아희를 원할하게 구동합니다. (quine과 logo가 작동하는 것을 확인했습니다.)
 - 빠릅니다.
-    
-    logo 아희 테스트를 0.21초 안에 완료합니다. (JIT 컴파일 시간 0.05초 포함)
-
-    아희아희 + quine 테스트를 0.7초안에 완료합니다. (기존 jit 컴파일러인 rpaheui보다 8배 빠른 결과입니다.)
+    - logo 아희 테스트를 0.21초 안에 완료합니다. (JIT 컴파일 시간 0.05초 포함)
+    - 아희아희 + quine 테스트를 0.7초안에 완료합니다. (기존 jit 컴파일러인 rpaheui보다 8배 빠른 결과입니다.)
 - 웹버전도 꽤나 빠릅니다.
-
-    logo 아희 테스트를 JIT 컴파일 시간을 제외하면 0.23초 안에 완료합니다.
+    - logo 아희 테스트를 JIT 컴파일 시간을 제외하면 0.23초 안에 완료합니다.
 
 ## 사용법
 
