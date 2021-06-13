@@ -25,13 +25,14 @@ struct X86Machine : public Machine {
     CodeBlockPtr createBlock() override;
     void addCodeBlock(const Location& location, CodeBlock* block,
                       std::set<BasicBlock*> emitted) override;
-    bool hasCodeBlock(const Location& location) override;
-    void runCodeBlock(const Location& location, RuntimeContext* ctx) override;
+    bool hasCodeBlock(BasicBlock* bb) override;
+    void runCodeBlock(BasicBlock* bb, RuntimeContext* ctx) override;
 
     void printChar(Word word) override;
     void printNum(Word word) override;
     Word inputChar() override;
     Word inputNum() override;
+    void reset() override;
 
     void printCharImpl(Word word);
     void printNumImpl(Word word);

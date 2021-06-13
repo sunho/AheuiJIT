@@ -51,12 +51,14 @@
 
 .SampleContainer {
   display: flex;
+  flex-wrap: wrap;
+  padding: 0 50px;
   align-items: center;
   margin-bottom: 10px;
 }
 
 .SampleButton {
-  margin: 0 5px;
+  margin: 2px 5px;
   padding: 3px;
   background: gray;
   color: white;

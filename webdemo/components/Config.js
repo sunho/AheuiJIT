@@ -16,7 +16,7 @@ function Config() {
   const [optIR, setOptIR] = useState(true);
   const [optAsm, setAsm] = useState(false);
   const [numCycle, numCycleInput] = useInput({type:"number"})
-  const [interpretAfterFail, setinterpretAfterFail] = useState(true);
+  const [interpretAfterFail, setinterpretAfterFail] = useState(false);
 
   useEffect(() => {
     AheuiJIT.config.logIR = logIR;

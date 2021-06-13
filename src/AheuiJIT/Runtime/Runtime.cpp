@@ -30,23 +30,33 @@ RuntimeConfig Runtime::getConfig() {
 Word Runtime::run(const std::u16string& code) {
     resetState();
     irBuffer.reset();
+    machine->reset();
     Location pc = DEFAULT_LOCATION;
     remainInterpretCycle = conf.numInterpretCycle;
     translator.setCode(code);
-    translator.translate(pc, irBuffer);
     do {
         ctx->location = 0;
+        if (!irBuffer.findBlock(pc)) {
+            translator.translate(pc, irBuffer);
+        }
         if (remainInterpretCycle) {
             pc = interpreter.run(pc, ctx.get(), irBuffer, remainInterpretCycle);
             if (pc == Location()) {
                 break;
             }
-        }
-        if (!remainInterpretCycle && !ctx->location) {
-            if (!machine->hasCodeBlock(pc)) {
-                translator.emit(pc, irBuffer);
+            if (!remainInterpretCycle && !ctx->location) {
+                ctx->location = 1;  // hack
+                continue;
             }
-            machine->runCodeBlock(pc, ctx.get());
+        } else {
+            BasicBlock* bb = irBuffer.findBlock(pc);
+            if (!machine->hasCodeBlock(bb)) {
+                translator.emit(pc, irBuffer);
+#ifndef __EMSCRIPTEN__
+                ctx->exhaustPatchTable->setValue(pc.hash(), machine->tlbTable[pc]);
+#endif
+            }
+            machine->runCodeBlock(bb, ctx.get());
         }
         if (ctx->location) {
             const Location location = Location::unpack(ctx->location);
@@ -54,16 +64,6 @@ Word Runtime::run(const std::u16string& code) {
             const Location validFailLocation = translator.stepToValidLocation(failLocation);
             if (conf.interpretAfterFail) {
                 remainInterpretCycle = conf.numInterpretCycle;
-            }
-            if (!irBuffer.findBlock(validFailLocation)) {
-                translator.translate(validFailLocation, irBuffer);
-                if (!remainInterpretCycle) {
-                    translator.emit(validFailLocation, irBuffer);
-#ifndef __EMSCRIPTEN__
-                    ctx->exhaustPatchTable->setValue(location.hash(),
-                                                     machine->tlbTable[validFailLocation]);
-#endif
-                }
             }
             pc = validFailLocation;
         }

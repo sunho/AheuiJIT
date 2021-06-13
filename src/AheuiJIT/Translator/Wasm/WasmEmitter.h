@@ -47,11 +47,11 @@ struct WasmBasicBlockBuilder {
     }
 
     BinaryenExpressionRef loadReg(uint8_t reg) {
-        return BinaryenLocalGet(code, reg + 2, BinaryenTypeInt64());
+        return BinaryenLocalGet(code, reg + 3, BinaryenTypeInt64());
     }
 
     void storeReg(uint8_t reg, BinaryenExpressionRef value) {
-        BB(*this, BinaryenLocalSet(code, reg + 2, value));
+        BB(*this, BinaryenLocalSet(code, reg + 3, value));
     }
 
     BinaryenExpressionRef makeInt32(int32_t value) {
@@ -60,6 +60,14 @@ struct WasmBasicBlockBuilder {
 
     BinaryenExpressionRef makeInt64(int64_t value) {
         return BinaryenConst(code, BinaryenLiteralInt64(value));
+    }
+
+    RelooperBlockRef flushSwitch(BinaryenExpressionRef condition) {
+        BinaryenExpressionRef cc = BinaryenBlock(code, fmt::format("bb{}", nextId++).c_str(),
+                                                 refs.data(), refs.size(), BinaryenTypeAuto());
+        RelooperBlockRef out = RelooperAddBlockWithSwitch(relooper, cc, condition);
+        refs.clear();
+        return out;
     }
 
     RelooperBlockRef flush(bool connect = true, bool setTail = true) {

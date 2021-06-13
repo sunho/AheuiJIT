@@ -42,12 +42,16 @@ void X86Machine::addCodeBlock(const Location& location, CodeBlock* block,
     blocks.emplace(location, func);
 }
 
-bool X86Machine::hasCodeBlock(const Location& location) {
-    return blocks.find(location) != blocks.end();
+bool X86Machine::hasCodeBlock(BasicBlock* bb) {
+    return blocks.find(bb->location) != blocks.end();
 }
 
-void X86Machine::runCodeBlock(const Location& location, RuntimeContext* ctx) {
-    blocks.at(location)(ctx);
+void X86Machine::runCodeBlock(BasicBlock* bb, RuntimeContext* ctx) {
+    blocks.at(bb->location)(ctx);
+}
+
+void X86Machine::reset() {
+    blocks.clear();
 }
 
 Word X86Machine::inputChar() {

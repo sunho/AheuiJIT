@@ -3,6 +3,8 @@
 #include <AheuiJIT/Runtime/Machine.h>
 #include <binaryen-c.h>
 
+#include <map>
+
 namespace aheuijit {
 
 constexpr size_t WASM_PAGE_SIZE = 65536;
@@ -24,15 +26,18 @@ struct WasmMachine : public Machine {
     CodeBlockPtr createBlock() override;
     void addCodeBlock(const Location& location, CodeBlock* block,
                       std::set<BasicBlock*> emitted) override;
-    bool hasCodeBlock(const Location& location) override;
-    void runCodeBlock(const Location& location, RuntimeContext* ctx) override;
+    bool hasCodeBlock(BasicBlock* bb) override;
+    void runCodeBlock(BasicBlock* bb, RuntimeContext* ctx) override;
 
     void printChar(Word word) override;
     void printNum(Word word) override;
     Word inputChar() override;
     Word inputNum() override;
+    void reset() override;
 
   private:
+    uint32_t nextId{ 1 };
+    std::map<uint64_t, uint32_t> blockTable;
     uint8_t* stack;
 };
 

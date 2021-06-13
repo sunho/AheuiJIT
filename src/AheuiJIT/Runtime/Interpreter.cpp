@@ -2,7 +2,6 @@
 
 #include <AheuiJIT/IR/InstructionVisitor.h>
 #include <AheuiJIT/Runtime/Runtime.h>
-
 #include <fmt/printf.h>
 
 using namespace aheuijit;
@@ -14,7 +13,7 @@ Location Interpreter::run(const Location &location, RuntimeContext *ctx, IRBuffe
     Location prevLocation;
     shouldFail = false;
     InstructionFormatter formatter;
-    
+
     while (!shouldFail && numCycle && pc != Location()) {
         BasicBlock *block = irBuffer.findBlock(pc);
         ASSERT(block)

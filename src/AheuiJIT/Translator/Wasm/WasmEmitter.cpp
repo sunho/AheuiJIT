@@ -31,9 +31,9 @@ void WasmEmitter::finalizeModule(BinaryenExpressionRef body) {
     for (size_t i = 0; i < VIRTUAL_REGS_NUM; ++i) {
         localTypes.push_back(BinaryenTypeInt64());
     }
-    BinaryenType paramTypes[] = { BinaryenTypeInt32(), BinaryenTypeInt32() };
+    BinaryenType paramTypes[] = { BinaryenTypeInt32(), BinaryenTypeInt32(), BinaryenTypeInt32() };
     BinaryenFunctionRef entry =
-        BinaryenAddFunction(code, "main", BinaryenTypeCreate(paramTypes, 2), BinaryenTypeNone(),
+        BinaryenAddFunction(code, "main", BinaryenTypeCreate(paramTypes, 3), BinaryenTypeNone(),
                             localTypes.data(), localTypes.size(), body);
     BinaryenAddExport(code, "main", "main");
     ASSERT(BinaryenModuleValidate(code))
@@ -55,10 +55,6 @@ void WasmEmitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBloc
     todo.push(bb);
 
     initModule();
-    emitPrologue();
-    builder.flush();
-    RelooperBlockRef startBlock = builder.getHead();
-    builder.resetHead();
 
     while (!todo.empty()) {
         block = todo.top();
@@ -131,8 +127,19 @@ void WasmEmitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBloc
         const auto [from, to, pred] = edge;
         RelooperAddBranch(tails.at(from), heads.at(to), pred, NULL);
     }
+    builder.resetHead();
 
-    RelooperAddBranch(startBlock, heads.at(bb->id), NULL, NULL);
+    emitPrologue();
+    RelooperBlockRef startBlock =
+        builder.flushSwitch(BinaryenLocalGet(code, 2, BinaryenTypeInt32()));
+    builder.resetHead();
+
+    for (auto block : emitted) {
+        BinaryenIndex toBlock[] = { static_cast<BinaryenIndex>(block->id) };
+        RelooperAddBranchForSwitch(startBlock, heads.at(block->id), toBlock, 1, NULL);
+    }
+    RelooperAddBranchForSwitch(startBlock, exitBlock, NULL, 0, NULL);
+
     BinaryenExpressionRef body = RelooperRenderAndDispose(relooper, startBlock, 0);
     finalizeModule(body);
 }

@@ -72,9 +72,15 @@ class StdinBuffer {
 
   readChar() {
     if (this.cursor >= this.buffer.length) {
-      throw "Not enough input";
+      return 'eof';
     }
-    return this.buffer.charAt(this.cursor++);
+    const ch = this.buffer.charAt(this.cursor);
+    if (ch === '\\' && this.cursor + 1 < this.buffer.length && this.buffer.charAt(this.cursor+1) === '0') {
+      this.cursor += 2;
+      return 'eof';
+    }
+    ++this.cursor;
+    return ch;
   }
 };
 
@@ -107,7 +113,7 @@ function CodeRunner() {
   const [isReady, setIsReady] = useState(false);
   const [out, setOut] = useState('');
   const [code, codeInput, setCodeInput] = useInput({ className: "Code", defaultValue: "밤밣따빠밣밟따뿌\n빠맣파빨받밤뚜뭏\n돋밬탕빠맣붏두붇\n볻뫃박발뚷투뭏붖\n뫃도뫃희멓뭏뭏붘\n뫃봌토범더벌뿌뚜\n뽑뽀멓멓더벓뻐뚠\n뽀덩벐멓뻐덕더벅" });
-  const [input, inputInput, _] = useInput({ className: "Input", defaultValue: "" });
+  const [input, inputInput, setInput] = useInput({ className: "Input", defaultValue: "" });
   useEffect(() => {
     AheuiJIT.ready.then(() => {
       setIsReady(true);
@@ -122,7 +128,7 @@ function CodeRunner() {
     <>
       <div className="Ready">(ready: {isReady ? "yes" : "no"})</div>
       <div>
-        <Examples setCode={(code) => { setCodeInput(code);}}/>
+        <Examples setCode={(code) => { setCodeInput(code);}} setInput={(i) => { setInput(i); }}/>
       </div>
       <div className="Container">
         <div>

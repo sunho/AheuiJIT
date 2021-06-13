@@ -9,15 +9,15 @@ BinaryenModuleRef WasmCodeBlock::getModule() const {
 }
 
 // clang-format off
-EM_JS(void, _setWasm, (uint32_t ptr, uint32_t size), { 
+EM_JS(void, _setWasm, (uint32_t id, uint32_t ptr, uint32_t size), { 
     Asyncify.handleAsync(async() => { 
-        await Module['AheuiJIT'].setWasm(ptr, size); 
+        await Module['AheuiJIT'].setWasm(id, ptr, size); 
     }); 
 });
 
-EM_JS(void, _runWasm, (uint32_t ptr, uint32_t sp), { 
+EM_JS(void, _runWasm, (uint32_t id, uint32_t ptr, uint32_t sp, uint32_t bb), { 
     Asyncify.handleAsync(async() => { 
-        await Module['AheuiJIT'].runWasm(ptr, sp); 
+        await Module['AheuiJIT'].runWasm(id, ptr, sp, bb); 
     }); 
 });
 // clang-format on
@@ -39,17 +39,29 @@ void WasmMachine::addCodeBlock(const Location& location, CodeBlock* block,
     WasmCodeBlock* wasmblock = dynamic_cast<WasmCodeBlock*>(block);
     BinaryenModuleRef module_ = wasmblock->getModule();
     BinaryenModuleAllocateAndWriteResult res = BinaryenModuleAllocateAndWrite(module_, nullptr);
-    _setWasm(reinterpret_cast<uint32_t>(res.binary), static_cast<uint32_t>(res.binaryBytes));
+    const uint32_t codeBlockId = nextId++;
+    _setWasm(codeBlockId, reinterpret_cast<uint32_t>(res.binary),
+             static_cast<uint32_t>(res.binaryBytes));
     free(res.binary);
+    BinaryenModuleDispose(module_);
+    for (auto bb : emitted) {
+        blockTable[bb->id] = codeBlockId;
+    }
 }
 
-bool WasmMachine::hasCodeBlock(const Location& location) {
-    // We should always retanslate
-    return false;
+bool WasmMachine::hasCodeBlock(BasicBlock* bb) {
+    return blockTable.find(bb->id) != blockTable.end();
 }
 
-void WasmMachine::runCodeBlock(const Location& location, RuntimeContext* ctx) {
-    _runWasm(reinterpret_cast<uint32_t>(ctx), reinterpret_cast<uint32_t>(stack) + WASM_STACK_SIZE);
+void WasmMachine::runCodeBlock(BasicBlock* bb, RuntimeContext* ctx) {
+    const uint32_t codeBlockId = blockTable.at(bb->id);
+    _runWasm(codeBlockId, reinterpret_cast<uint32_t>(ctx),
+             reinterpret_cast<uint32_t>(stack) + WASM_STACK_SIZE, bb->id);
+}
+
+void WasmMachine::reset() {
+    nextId = 1;
+    blockTable.clear();
 }
 
 // clang-format off

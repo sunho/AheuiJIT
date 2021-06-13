@@ -68,7 +68,7 @@ struct RuntimeConfig {
     bool interpretAfterFail{ false };
     bool logIR{ false };
     bool logDisasm{ false };
-    bool logStep { false };
+    bool logStep{ false };
     bool optIR{ true };
     bool optAsm{ false };
     size_t wasmMemorySize{ 16777216 * 10 };

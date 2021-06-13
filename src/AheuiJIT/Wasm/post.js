@@ -5,6 +5,7 @@ class AheuiJITImpl {
         this._initRuntime = cwrap('initRuntime', null, [], { async: true });
         this._runAheuiCode = cwrap('runAheuiCode', 'number', ['string'], { async: true });
         this._setConfig = cwrap('setConfig', null, ['string', 'number'], { async: true });
+        this.jitMap = new Map();
         this.callbacks = {
             printChar: () => {},
             printNum: () => {},
@@ -18,7 +19,7 @@ class AheuiJITImpl {
             optIR: true,
             optAsm: false,
             numInterpretCycle: 256,
-            interpretAfterFail: true,
+            interpretAfterFail: false,
             wasmMemorySize: 16777216 * 10
         };
     }
@@ -43,7 +44,7 @@ class AheuiJITImpl {
         await this._setConfig("wasmMemorySize", this.config.wasmMemorySize);
     }
 
-    async setWasm(ptr, size) {
+    async setWasm(id, ptr, size) {
         const imports = {
             js: { 
                 memory: wasmMemory,
@@ -53,12 +54,13 @@ class AheuiJITImpl {
                 inputNum: () => { return this.inputNum(); }
             }
         };
-        this.wasm = await WebAssembly.instantiate(Module.HEAP8.slice(ptr, ptr+size), imports);
+        this.jitMap.set(id, await WebAssembly.instantiate(Module.HEAP8.slice(ptr, ptr+size), imports));
         console.time("afterCompile");
     }
 
-    async runWasm(ctx, sp) {
-        this.wasm.instance.exports.main(ctx, sp);
+    async runWasm(id, ctx, sp, bb) {
+        const wasm  = this.jitMap.get(id);
+        wasm.instance.exports.main(ctx, sp, bb);
     }
 
     printChar(word) {
@@ -70,7 +72,11 @@ class AheuiJITImpl {
     }
 
     inputChar() {
-        return this.callbacks.inputChar().charCodeAt(0);
+        const out = this.callbacks.inputChar();
+        if (out === 'eof') {
+            return -1;
+        }
+        return out.charCodeAt(0);
     }
 
     inputNum() {
