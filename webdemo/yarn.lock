@@ -108,10 +108,10 @@
   "resolved" "https://registry.npmjs.org/@types/node/-/node-15.12.2.tgz"
   "version" "15.12.2"
 
-"aheui-jit@^1.0.8":
-  "integrity" "sha512-NEYzRH2erHEYTpc+jgs9GTrHZsVRNNZQCTjPW89wlv2AG74odfl9SNEzWvPiHP9QE3uPFg9kY7SkOoPWt+KTyA=="
-  "resolved" "https://registry.npmjs.org/aheui-jit/-/aheui-jit-1.0.8.tgz"
-  "version" "1.0.8"
+"aheui-jit@^1.0.9":
+  "integrity" "sha512-VAPB/mD+hzldANsHUQTEDglWmmwDmKSCKIx/GUFMWUENKHGaczPpPXPLEtjcC/LefWsjMKXLgJ74raTw4+ga0w=="
+  "resolved" "https://registry.npmjs.org/aheui-jit/-/aheui-jit-1.0.9.tgz"
+  "version" "1.0.9"
 
 "anser@1.4.9":
   "integrity" "sha512-AI+BjTeGt2+WFk4eWcqbQ7snZpDBt8SaLlj0RT2h5xfdWaiy51OjYvqwMrNzJLGy8iOAL6nKDITWO+rd4MkYEA=="
