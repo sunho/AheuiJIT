@@ -25,9 +25,10 @@ struct Runtime {
     IRBuffer irBuffer;
     Interpreter interpreter;
     std::unique_ptr<RuntimeContext> ctx;
-    std::map<Location, TranslatedFunc> entryTlbTable;
     std::array<uint64_t*, 27> storages;
     size_t remainInterpretCycle{ 0 };
+    Location pc;
+    Location lastFailLocation;
 };
 
 }  // namespace aheuijit

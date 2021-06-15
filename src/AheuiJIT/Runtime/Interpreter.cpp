@@ -9,12 +9,13 @@ using namespace aheuijit;
 Location Interpreter::run(const Location &location, RuntimeContext *ctx, IRBuffer &irBuffer,
                           size_t &numCycle) {
     this->ctx = ctx;
+    shouldFail = false;
+
     Location pc = location;
     Location prevLocation;
-    shouldFail = false;
     InstructionFormatter formatter;
 
-    while (!shouldFail && numCycle && pc != Location()) {
+    while (numCycle && pc != Location()) {
         BasicBlock *block = irBuffer.findBlock(pc);
         ASSERT(block)
         popFixup = false;
@@ -61,7 +62,7 @@ fail:
         if (popFixup) {
             const Location loc = Location::unpack(ctx->location);
             if (loc.pointer.queue) {
-                ctx->queueBack--;
+                --ctx->queueBack;
                 ctx->queueBack %= conf.maxStorageSize;
             } else {
                 ctx->stackTops[ctx->storage] -= 8;

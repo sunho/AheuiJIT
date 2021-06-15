@@ -29,35 +29,35 @@ RuntimeConfig Runtime::getConfig() {
 
 Word Runtime::run(const std::u16string& code) {
     resetState();
-    irBuffer.reset();
-    machine->reset();
-    Location pc = DEFAULT_LOCATION;
-    remainInterpretCycle = conf.numInterpretCycle;
     translator.setCode(code);
-    do {
-        ctx->location = 0;
+
+    remainInterpretCycle = conf.numInterpretCycle;
+    pc = DEFAULT_LOCATION;
+    lastFailLocation = pc;
+
+    bool exit = false;
+    while (!exit) {
+        exit = true;
         if (!irBuffer.findBlock(pc)) {
             translator.translate(pc, irBuffer);
         }
         if (remainInterpretCycle) {
             pc = interpreter.run(pc, ctx.get(), irBuffer, remainInterpretCycle);
-            if (pc == Location()) {
-                break;
-            }
-            if (!remainInterpretCycle && !ctx->location) {
-                ctx->location = 1;  // hack
-                continue;
+            // JIT requested; attempt to jit in next iteration
+            if (pc != Location()) {
+                exit = false;
             }
         } else {
             BasicBlock* bb = irBuffer.findBlock(pc);
             if (!machine->hasCodeBlock(bb)) {
                 translator.emit(pc, irBuffer);
 #ifndef __EMSCRIPTEN__
-                ctx->exhaustPatchTable->setValue(pc.hash(), machine->tlbTable[pc]);
+                ctx->exhaustPatchTable->setValue(lastFailLocation.hash(), machine->tlbTable[pc]);
 #endif
             }
             machine->runCodeBlock(bb, ctx.get());
         }
+        // Storage exhausted reverse the direction and run again
         if (ctx->location) {
             const Location location = Location::unpack(ctx->location);
             const Location failLocation = translator.calculateFailLocation(location);
@@ -65,9 +65,12 @@ Word Runtime::run(const std::u16string& code) {
             if (conf.interpretAfterFail) {
                 remainInterpretCycle = conf.numInterpretCycle;
             }
+            lastFailLocation = location;
             pc = validFailLocation;
+            ctx->location = 0;
+            exit = false;
         }
-    } while (ctx->location);
+    }
 
     if (ctx->storage == QUEUE_STORAGE_IMM) {
         if (ctx->queueFront != ctx->queueBack) {
@@ -106,5 +109,6 @@ void Runtime::resetState() {
         ctx->stackUppers[i] = ctx->stackTops[i];
     }
     ctx->storage = 0;
-    entryTlbTable.clear();
+    machine->reset();
+    irBuffer.reset();
 }
