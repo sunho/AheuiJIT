@@ -12,24 +12,18 @@ Location Interpreter::run(const Location &location, RuntimeContext *ctx, IRBuffe
     shouldFail = false;
 
     Location pc = location;
-    Location prevLocation;
     InstructionFormatter formatter;
 
     while (numCycle && pc != Location()) {
         BasicBlock *block = irBuffer.findBlock(pc);
         ASSERT(block)
-        popFixup = false;
         for (auto inst : block->insts) {
-            if (inst->location != prevLocation) {
-                popFixup = false;
-            }
             if (conf.logStep) {
                 fmt::print("{}: {}\n", inst->location.description(), formatter.format(inst));
             }
             visit(inst);
-            prevLocation = inst->location;
             if (shouldFail)
-                goto fail;
+                return pc;
         }
         const size_t deltaCycle = block->insts.size();
         if (deltaCycle > numCycle) {
@@ -54,18 +48,6 @@ Location Interpreter::run(const Location &location, RuntimeContext *ctx, IRBuffe
                     pc = term->fail->location;
                 }
                 break;
-            }
-        }
-    }
-fail:
-    if (shouldFail) {
-        if (popFixup) {
-            const Location loc = Location::unpack(ctx->location);
-            if (loc.pointer.queue) {
-                --ctx->queueBack;
-                ctx->queueBack %= conf.maxStorageSize;
-            } else {
-                ctx->stackTops[ctx->storage] -= 8;
             }
         }
     }
@@ -135,24 +117,17 @@ void Interpreter::pushStack(Value *value) {
 
 void Interpreter::popStack(Void *) {
     uintptr_t stackTop = ctx->stackTops[ctx->storage];
-    uintptr_t stackUpper = ctx->stackUppers[ctx->storage];
-    if (stackTop == stackUpper) {
-        shouldFail = true;
-        ctx->location = inst->location.pack();
-        return;
-    }
     localBank[inst->output->id] = *reinterpret_cast<Word *>(stackTop);
     stackTop += 8;
     ctx->stackTops[ctx->storage] = stackTop;
-    popFixup = true;
 }
 
 void Interpreter::pushQueueFront(Value *value) {
     uint64_t queueBack = ctx->queueBack;
-    queueBack -= 1;
-    queueBack %= conf.maxStorageSize;
     uintptr_t queueBackPtr = ctx->queueBuffer + queueBack * 8;
     *reinterpret_cast<Word *>(queueBackPtr) = unwrapValue(value);
+    queueBack -= 1;
+    queueBack %= conf.maxStorageSize;
     ctx->queueBack = queueBack;
 }
 
@@ -166,19 +141,12 @@ void Interpreter::pushQueueBack(Value *value) {
 }
 
 void Interpreter::popQueue(Void *) {
-    uint64_t queueFront = ctx->queueFront;
     uint64_t queueBack = ctx->queueBack;
     queueBack += 1;
     queueBack %= conf.maxStorageSize;
-    if (queueFront == queueBack) {
-        shouldFail = true;
-        ctx->location = inst->location.pack();
-        return;
-    }
     uintptr_t queueBackPtr = ctx->queueBuffer + queueBack * 8;
     localBank[inst->output->id] = *reinterpret_cast<Word *>(queueBackPtr);
     ctx->queueBack = queueBack;
-    popFixup = true;
 }
 
 void Interpreter::setStore(Value *value) {
@@ -203,4 +171,51 @@ void Interpreter::inputNum(Void *) {
 
 void Interpreter::inputChar(Void *) {
     localBank[inst->output->id] = ctx->machine->inputChar();
+}
+
+void Interpreter::checkStack1(Void *) {
+    uintptr_t stackTop = ctx->stackTops[ctx->storage];
+    uintptr_t stackUpper = ctx->stackUppers[ctx->storage];
+    if (stackTop == stackUpper) {
+        shouldFail = true;
+        ctx->location = inst->location.pack();
+    }
+}
+
+void Interpreter::checkStack2(Void *) {
+    uintptr_t stackTop = ctx->stackTops[ctx->storage] + 8;
+    uintptr_t stackUpper = ctx->stackUppers[ctx->storage];
+    if (stackTop >= stackUpper) {
+        shouldFail = true;
+        ctx->location = inst->location.pack();
+    }
+}
+
+void Interpreter::checkQueue1(Void *) {
+    uint64_t queueFront = ctx->queueFront;
+    uint64_t queueBack = ctx->queueBack;
+    queueBack += 1;
+    queueBack %= conf.maxStorageSize;
+    if (queueFront == queueBack) {
+        shouldFail = true;
+        ctx->location = inst->location.pack();
+    }
+}
+
+void Interpreter::checkQueue2(Void *) {
+    uint64_t queueFront = ctx->queueFront;
+    uint64_t queueBack = ctx->queueBack;
+    queueBack += 1;
+    queueBack %= conf.maxStorageSize;
+    if (queueFront == queueBack) {
+        shouldFail = true;
+        ctx->location = inst->location.pack();
+        return;
+    }
+    queueBack += 1;
+    queueBack %= conf.maxStorageSize;
+    if (queueFront == queueBack) {
+        shouldFail = true;
+        ctx->location = inst->location.pack();
+    }
 }

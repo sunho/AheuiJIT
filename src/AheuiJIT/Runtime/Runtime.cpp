@@ -33,11 +33,12 @@ Word Runtime::run(const std::u16string& code) {
 
     remainInterpretCycle = conf.numInterpretCycle;
     pc = DEFAULT_LOCATION;
-    lastFailLocation = pc;
+    lastFailLocation = Location();
 
     bool exit = false;
     while (!exit) {
         exit = true;
+        pc = translator.stepToValidLocation(pc);
         if (!irBuffer.findBlock(pc)) {
             translator.translate(pc, irBuffer);
         }
@@ -52,7 +53,10 @@ Word Runtime::run(const std::u16string& code) {
             if (!machine->hasCodeBlock(bb)) {
                 translator.emit(pc, irBuffer);
 #ifndef __EMSCRIPTEN__
-                ctx->exhaustPatchTable->setValue(lastFailLocation.hash(), machine->tlbTable[pc]);
+                if (lastFailLocation != Location()) {
+                    ctx->exhaustPatchTable->setValue(lastFailLocation.hash(),
+                                                     machine->tlbTable[pc]);
+                }
 #endif
             }
             machine->runCodeBlock(bb, ctx.get());

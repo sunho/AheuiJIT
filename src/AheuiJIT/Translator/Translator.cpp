@@ -2,8 +2,12 @@
 
 #ifdef __EMSCRIPTEN__
 #include <AheuiJIT/Translator/Wasm/WasmEmitter.h>
-#else
+#endif
+#ifdef X86
 #include <AheuiJIT/Translator/X86/X86Emitter.h>
+#endif
+#ifdef AARCH
+#include <AheuiJIT/Translator/A64/A64Emitter.h>
 #endif
 #include <AheuiJIT/IR/Builder.h>
 #include <AheuiJIT/Translator/Emitter.h>
@@ -22,10 +26,17 @@ static std::unique_ptr<Emitter> createEmitterImpl(CodeBlock *block) {
     WasmCodeBlock *wasmblock = dynamic_cast<WasmCodeBlock *>(block);
     return std::make_unique<WasmEmitter>(wasmblock->getModule());
 }
-#else
+#endif
+#ifdef X86
 static std::unique_ptr<Emitter> createEmitterImpl(CodeBlock *block) {
     X86CodeBlock *x86block = dynamic_cast<X86CodeBlock *>(block);
     return std::make_unique<X86Emitter>(x86block->getAssembler());
+}
+#endif
+#ifdef AARCH
+static std::unique_ptr<Emitter> createEmitterImpl(CodeBlock *block) {
+    A64CodeBlock *a64block = dynamic_cast<A64CodeBlock *>(block);
+    return std::make_unique<A64Emitter>(a64block->getAssembler());
 }
 #endif
 

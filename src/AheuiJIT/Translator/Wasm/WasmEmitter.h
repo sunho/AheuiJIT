@@ -192,7 +192,6 @@ struct WasmEmitter : public Emitter {
     void emitJITRequest(BinaryenExpressionRef head, BinaryenExpressionRef tail, bool i64);
     WasmReg unwrapValue(Value *value);
 
-    bool popFixup{ false };
     BinaryenModuleRef code;
     RelooperRef relooper;
     WasmBasicBlockBuilder builder;

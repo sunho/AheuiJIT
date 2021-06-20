@@ -7,6 +7,7 @@ bool Translator::decodeNOP(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeADD(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 2);
     Local *rhs = b.pop(cur.pointer.queue);
     Local *lhs = b.pop(cur.pointer.queue);
     Local *value = b.add(lhs, rhs);
@@ -15,6 +16,7 @@ bool Translator::decodeADD(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeSUB(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 2);
     Local *rhs = b.pop(cur.pointer.queue);
     Local *lhs = b.pop(cur.pointer.queue);
     Local *value = b.sub(lhs, rhs);
@@ -23,6 +25,7 @@ bool Translator::decodeSUB(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeMUL(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 2);
     Local *rhs = b.pop(cur.pointer.queue);
     Local *lhs = b.pop(cur.pointer.queue);
     Local *value = b.mul(lhs, rhs);
@@ -31,6 +34,7 @@ bool Translator::decodeMUL(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeDIV(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 2);
     Local *rhs = b.pop(cur.pointer.queue);
     Local *lhs = b.pop(cur.pointer.queue);
     Local *value = b.div(lhs, rhs);
@@ -39,6 +43,7 @@ bool Translator::decodeDIV(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeMOD(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 2);
     Local *rhs = b.pop(cur.pointer.queue);
     Local *lhs = b.pop(cur.pointer.queue);
     Local *value = b.mod(lhs, rhs);
@@ -47,6 +52,7 @@ bool Translator::decodeMOD(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeCMP(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 2);
     Local *rhs = b.pop(cur.pointer.queue);
     Local *lhs = b.pop(cur.pointer.queue);
     Local *value = b.cmp(lhs, rhs);
@@ -55,6 +61,7 @@ bool Translator::decodeCMP(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeCHANGE(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 2);
     Local *top = b.pop(cur.pointer.queue);
     Local *next = b.pop(cur.pointer.queue);
     if (cur.pointer.queue) {
@@ -69,6 +76,7 @@ bool Translator::decodeCHANGE(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeDUP(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 1);
     Local *val = b.pop(cur.pointer.queue);
     if (cur.pointer.queue) {
         b.pushQueueFront(val);
@@ -103,6 +111,7 @@ bool Translator::decodePUSH(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeMOV(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 1);
     Local *value = b.pop(cur.pointer.queue);
     Local *backup = b.getStore(nullptr);
     Storage store = token.storage.toStorage();
@@ -114,6 +123,7 @@ bool Translator::decodeMOV(Builder &b, const Token &token) {
 }
 
 bool Translator::decodePOP(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 1);
     Local *value = b.pop(cur.pointer.queue);
     if (token.storage == TokenStorage::OO) {
         b.outputNum(value);
@@ -129,6 +139,7 @@ bool Translator::decodeEXIT(Builder &b, const Token &token) {
 }
 
 bool Translator::decodeCBZ(Builder &b, const Token &token) {
+    b.checkStorage(cur.pointer.queue, 1);
     Local *pred = b.pop(cur.pointer.queue);
     b.setConditionalTerminal(pred);
     return false;

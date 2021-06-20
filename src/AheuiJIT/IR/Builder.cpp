@@ -1,5 +1,7 @@
 #include "Builder.h"
 
+#include <AheuiJIT/Util/Util.h>
+
 using namespace aheuijit;
 
 Builder::Builder() {
@@ -179,4 +181,34 @@ Local *Builder::popQueue(Void *) {
     Instruction *inst = createInstruction(Opcode::popQueue);
     inst->output = output;
     return output;
+}
+
+void Builder::checkStack1(Void *) {
+    createInstruction(Opcode::checkStack1);
+}
+
+void Builder::checkStack2(Void *) {
+    createInstruction(Opcode::checkStack2);
+}
+
+void Builder::checkQueue1(Void *) {
+    createInstruction(Opcode::checkQueue1);
+}
+
+void Builder::checkQueue2(Void *) {
+    createInstruction(Opcode::checkQueue2);
+}
+
+void Builder::checkStorage(bool queue, int n) {
+    if (queue && n == 1) {
+        checkQueue1(nullptr);
+    } else if (queue && n == 2) {
+        checkQueue2(nullptr);
+    } else if (!queue && n == 1) {
+        checkStack1(nullptr);
+    } else if (!queue && n == 2) {
+        checkStack2(nullptr);
+    } else {
+        ASSERT(false)
+    }
 }

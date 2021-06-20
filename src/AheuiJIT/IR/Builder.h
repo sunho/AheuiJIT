@@ -25,6 +25,7 @@ struct Builder {
 
     Local *pop(bool queue);
     void push(bool queue, Value *value);
+    void checkStorage(bool queue, int n);
 #define INST(name, ret, ...) ret name(__VA_ARGS__);
 #include "Instruction.inc"
 #undef INST

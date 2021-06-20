@@ -24,12 +24,10 @@ bool AggregatePushPopPass::runOnBlock(Builder& b, BasicBlock* block) {
     };
     std::array<int, 27> counts;  // 26: current storage
     int trackedStorage = 26;
-    std::set<int> removeInstOffsets;
     std::map<Value*, Value*> patchValues;
     std::map<uint64_t, TrackedPush> pushes;
     std::map<Location, int> popCounts;
-    std::map<int, Location> removeOffsetCounterpart;
-
+    std::multimap<Location, int> removeInstCandidates;
     const auto getKey = [](uint32_t count, uint32_t storage) {
         return ((uint64_t)count << 32) | (uint64_t)storage;
     };
@@ -75,12 +73,29 @@ bool AggregatePushPopPass::runOnBlock(Builder& b, BasicBlock* block) {
                 const uint64_t key = getKey(--counts[trackedStorage], trackedStorage);
                 const TrackedPush tp = pushes[key];
                 ASSERT(tp.value)
-                removeInstOffsets.insert(tp.offset);
-                removeInstOffsets.insert(inst->offset);
-                removeOffsetCounterpart.emplace(tp.offset, inst->location);
-                patchValues.emplace(inst->output, tp.value);
+                removeInstCandidates.emplace(inst->location, tp.offset);
+                removeInstCandidates.emplace(inst->location, inst->offset);
+                patchValues.emplace(inst->output, tp.value);  // TODO: this will be corrupted if I
+                                                              // reorder instructions
                 pushes.erase(key);
                 break;
+            }
+            case Opcode::checkStack1:
+            case Opcode::checkStack2:
+            case Opcode::checkQueue1:
+            case Opcode::checkQueue2: {
+                removeInstCandidates.emplace(inst->location, inst->offset);
+                break;
+            }
+        }
+    }
+
+    std::set<int> removeInstOffsets;
+    for (auto [loc, count] : popCounts) {
+        if (count == 0) {
+            for (auto it = removeInstCandidates.lower_bound(loc);
+                 it != removeInstCandidates.upper_bound(loc); ++it) {
+                removeInstOffsets.insert(it->second);
             }
         }
     }
@@ -88,16 +103,9 @@ bool AggregatePushPopPass::runOnBlock(Builder& b, BasicBlock* block) {
     for (auto it = block->insts.begin(); it != block->insts.end();) {
         Instruction* inst = *it;
         if (removeInstOffsets.find(inst->offset) != removeInstOffsets.end()) {
-            if (inst->opcode == Opcode::popStack && popCounts[inst->location] == 0) {
-                block->insts.erase(it++);
-                removeInstOffsets.erase(inst->offset);
-                continue;
-            } else if (inst->opcode == Opcode::pushStack &&
-                       popCounts[removeOffsetCounterpart[inst->offset]] == 0) {
-                block->insts.erase(it++);
-                removeInstOffsets.erase(inst->offset);
-                continue;
-            }
+            block->insts.erase(it++);
+            removeInstOffsets.erase(inst->offset);
+            continue;
         }
 
         for (int i = 0; i < inst->args.size(); ++i) {

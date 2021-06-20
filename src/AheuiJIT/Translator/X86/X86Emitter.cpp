@@ -73,15 +73,9 @@ void X86Emitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBlock
         const auto lock2 = regAlloc.allocSystem(x86::rsp);
         const auto lock3 = regAlloc.allocSystem(x86::rdi);
 
-        Location prevLocation;
-        popFixup = false;
         for (auto inst : block->insts) {
-            if (inst->location != prevLocation) {
-                popFixup = false;
-            }
             regAlloc.setInstructionIndex(inst->offset);
             visit(inst);
-            prevLocation = inst->location;
         }
 
         done.insert(block->id);
@@ -229,22 +223,6 @@ void X86Emitter::emitSubroutines() {
 
 void X86Emitter::emitJITRequest(const Location &location) {
     regAlloc.emitDeinitStub();
-    if (popFixup) {
-        if (location.pointer.queue) {
-            x86::Mem queueBackPtr = x86::ptr(x86::rdi, offsetof(RuntimeContext, queueBack));
-            code.mov(x86::rbx, queueBackPtr);
-            code.sub(x86::rbx, 1);
-            code.and_(x86::rbx, conf.maxStorageSize - 1);
-            code.mov(queueBackPtr, x86::rbx);
-        } else {
-            code.mov(x86::rax, x86::ptr(x86::rdi, offsetof(RuntimeContext, storage)));
-            x86::Mem stackPtr =
-                x86::ptr(x86::rdi, x86::rax, 3, offsetof(RuntimeContext, stackTops));
-            code.mov(x86::rbx, stackPtr);
-            code.lea(x86::rbx, x86::ptr(x86::rbx, -8));
-            code.mov(stackPtr, x86::rbx);
-        }
-    }
     code.mov(x86::rbx, location.pack());
     code.mov(x86::rdx, imm(location.hash()));
     code.jmp(jitRequestLabel);
@@ -371,28 +349,15 @@ void X86Emitter::pushStack(Value *value) {
 }
 
 void X86Emitter::popStack(Void *) {
-    Label die = code.newLabel();
-    Label end = code.newLabel();
     X86Reg outputReg = regAlloc.allocLocal(inst->output);
     X86Reg store = regAlloc.allocTmp();
     X86Reg stack = regAlloc.allocTmp();
-    X86Reg stackFront = regAlloc.allocTmp();
     code.mov(store.get().r32(), x86::ptr(x86::rdi, offsetof(RuntimeContext, storage)));
     x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(RuntimeContext, stackTops));
-    x86::Mem stackUpperPtr =
-        x86::ptr(x86::rdi, store.get(), 3, offsetof(RuntimeContext, stackUppers));
     code.mov(stack.get(), stackPtr);
-    code.mov(stackFront.get(), stackUpperPtr);
-    code.cmp(stack.get(), stackFront.get());
-    code.je(die);
     code.mov(outputReg.get(), x86::ptr(stack.get()));
     code.lea(stack.get(), x86::ptr(stack.get(), 8));
     code.mov(stackPtr, stack.get());
-    code.jmp(end);
-    code.bind(die);
-    emitJITRequest(inst->location);
-    code.bind(end);
-    popFixup = true;
 }
 
 void X86Emitter::pushQueueFront(Value *value) {
@@ -424,28 +389,16 @@ void X86Emitter::pushQueueBack(Value *value) {
 }
 
 void X86Emitter::popQueue(Void *) {
-    Label die = code.newLabel();
-    Label end = code.newLabel();
     X86Reg outputReg = regAlloc.allocLocal(inst->output);
-    x86::Mem queueFrontPtr = x86::ptr(x86::rdi, offsetof(RuntimeContext, queueFront));
     x86::Mem queueBackPtr = x86::ptr(x86::rdi, offsetof(RuntimeContext, queueBack));
-    X86Reg queueFront = regAlloc.allocTmp();
     X86Reg queueBack = regAlloc.allocTmp();
     X86Reg queueBuffer = regAlloc.allocTmp();
-    code.mov(queueFront.get(), queueFrontPtr);
     code.mov(queueBack.get(), queueBackPtr);
     code.add(queueBack.get(), 1);
     code.and_(queueBack.get(), conf.maxStorageSize - 1);
-    code.cmp(queueFront.get(), queueBack.get());
-    code.je(die);
     code.mov(queueBuffer.get(), x86::ptr(x86::rdi, offsetof(RuntimeContext, queueBuffer)));
     code.mov(outputReg.get(), x86::ptr(queueBuffer.get(), queueBack.get(), 3, 0));
     code.mov(queueBackPtr, queueBack.get());
-    code.jmp(end);
-    code.bind(die);
-    emitJITRequest(inst->location);
-    code.bind(end);
-    popFixup = true;
 }
 
 void X86Emitter::setStore(Value *value) {
@@ -488,4 +441,87 @@ void X86Emitter::inputChar(Void *) {
     code.mov(machinePtr.get(), x86::ptr(x86::rdi, offsetof(RuntimeContext, machine)));
     emitRetMethodCall(METHOD_TO_POINTER(X86Machine, inputCharImpl, Word), machinePtr.get(),
                       dest.get());
+}
+
+void X86Emitter::checkStack1(Void *) {
+    Label die = code.newLabel();
+    Label end = code.newLabel();
+    X86Reg store = regAlloc.allocTmp();
+    X86Reg stack = regAlloc.allocTmp();
+    X86Reg stackFront = regAlloc.allocTmp();
+    code.mov(store.get().r32(), x86::ptr(x86::rdi, offsetof(RuntimeContext, storage)));
+    x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(RuntimeContext, stackTops));
+    x86::Mem stackUpperPtr =
+        x86::ptr(x86::rdi, store.get(), 3, offsetof(RuntimeContext, stackUppers));
+    code.mov(stack.get(), stackPtr);
+    code.mov(stackFront.get(), stackUpperPtr);
+    code.cmp(stack.get(), stackFront.get());
+    code.je(die);
+    code.jmp(end);
+    code.bind(die);
+    emitJITRequest(inst->location);
+    code.bind(end);
+}
+
+void X86Emitter::checkStack2(Void *) {
+    Label die = code.newLabel();
+    Label end = code.newLabel();
+    X86Reg store = regAlloc.allocTmp();
+    X86Reg stack = regAlloc.allocTmp();
+    X86Reg stackFront = regAlloc.allocTmp();
+    code.mov(store.get().r32(), x86::ptr(x86::rdi, offsetof(RuntimeContext, storage)));
+    x86::Mem stackPtr = x86::ptr(x86::rdi, store.get(), 3, offsetof(RuntimeContext, stackTops));
+    x86::Mem stackUpperPtr =
+        x86::ptr(x86::rdi, store.get(), 3, offsetof(RuntimeContext, stackUppers));
+    code.mov(stackFront.get(), stackUpperPtr);
+    code.mov(stack.get(), stackPtr);
+    code.add(stack.get(), 8);
+    code.cmp(stack.get(), stackFront.get());
+    code.jge(die);
+    code.jmp(end);
+    code.bind(die);
+    emitJITRequest(inst->location);
+    code.bind(end);
+}
+
+void X86Emitter::checkQueue1(Void *) {
+    Label die = code.newLabel();
+    Label end = code.newLabel();
+    x86::Mem queueFrontPtr = x86::ptr(x86::rdi, offsetof(RuntimeContext, queueFront));
+    x86::Mem queueBackPtr = x86::ptr(x86::rdi, offsetof(RuntimeContext, queueBack));
+    X86Reg queueFront = regAlloc.allocTmp();
+    X86Reg queueBack = regAlloc.allocTmp();
+    code.mov(queueFront.get(), queueFrontPtr);
+    code.mov(queueBack.get(), queueBackPtr);
+    code.add(queueBack.get(), 1);
+    code.and_(queueBack.get(), conf.maxStorageSize - 1);
+    code.cmp(queueFront.get(), queueBack.get());
+    code.je(die);
+    code.jmp(end);
+    code.bind(die);
+    emitJITRequest(inst->location);
+    code.bind(end);
+}
+
+void X86Emitter::checkQueue2(Void *) {
+    Label die = code.newLabel();
+    Label end = code.newLabel();
+    x86::Mem queueFrontPtr = x86::ptr(x86::rdi, offsetof(RuntimeContext, queueFront));
+    x86::Mem queueBackPtr = x86::ptr(x86::rdi, offsetof(RuntimeContext, queueBack));
+    X86Reg queueFront = regAlloc.allocTmp();
+    X86Reg queueBack = regAlloc.allocTmp();
+    code.mov(queueFront.get(), queueFrontPtr);
+    code.mov(queueBack.get(), queueBackPtr);
+    code.add(queueBack.get(), 1);
+    code.and_(queueBack.get(), conf.maxStorageSize - 1);
+    code.cmp(queueFront.get(), queueBack.get());
+    code.je(die);
+    code.add(queueBack.get(), 1);
+    code.and_(queueBack.get(), conf.maxStorageSize - 1);
+    code.cmp(queueFront.get(), queueBack.get());
+    code.je(die);
+    code.jmp(end);
+    code.bind(die);
+    emitJITRequest(inst->location);
+    code.bind(end);
 }

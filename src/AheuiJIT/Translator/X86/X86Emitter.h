@@ -112,7 +112,6 @@ struct X86Emitter : public Emitter {
 
     inline X86Reg unwrapValue(Value *value);
 
-    bool popFixup{ false };
     asmjit::x86::Assembler &code;
     RegAlloc<asmjit::x86::Gp, 16> regAlloc;
     BasicBlock *block{ nullptr };

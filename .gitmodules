@@ -13,3 +13,6 @@ url=https://github.com/asmjit/asmjit.git
 [submodule "external/binaryen"]
 	path = external/binaryen
 	url = https://github.com/WebAssembly/binaryen.git
+[submodule "external/asmjit-aarch64"]
+	path = external/asmjit-aarch64
+	url = https://github.com/asmjit/asmjit.git

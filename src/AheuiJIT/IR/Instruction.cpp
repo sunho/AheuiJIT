@@ -93,3 +93,19 @@ void InstructionFormatter::getStore(Void *) {
 void InstructionFormatter::setStore(Value *value) {
     ss << fmt::format("SetStore({})", value->description());
 }
+
+void InstructionFormatter::checkStack1(Void *) {
+    ss << "CheckStack1()";
+}
+
+void InstructionFormatter::checkStack2(Void *) {
+    ss << "CheckStack2()";
+}
+
+void InstructionFormatter::checkQueue1(Void *) {
+    ss << "CheckQueue1()";
+}
+
+void InstructionFormatter::checkQueue2(Void *) {
+    ss << "CheckQueue2()";
+}

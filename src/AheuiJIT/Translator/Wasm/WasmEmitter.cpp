@@ -68,15 +68,9 @@ void WasmEmitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBloc
         emitted.insert(block);
         regAlloc.emitInitStub();
 
-        Location prevLocation;
-        popFixup = false;
         for (auto inst : block->insts) {
-            if (inst->location != prevLocation) {
-                popFixup = false;
-            }
             regAlloc.setInstructionIndex(inst->offset);
             visit(inst);
-            prevLocation = inst->location;
         }
 
         done.insert(block->id);
@@ -288,11 +282,6 @@ void WasmEmitter::popQueue(Void *) {
         BinaryenBinary(code, BinaryenAddInt64(), queueBackBefore, builder.makeInt64(1));
     queueBack = BinaryenBinary(code, BinaryenAndInt64(), queueBack,
                                builder.makeInt64(conf.maxStorageSize - 1));
-    BinaryenExpressionRef queueFront =
-        BinaryenLoad(code, 8, true, offsetof(RuntimeContext, queueFront), 0, BinaryenTypeInt64(),
-                     builder.getContextPtr());
-    emitJITRequest(queueBack, queueFront, true);
-    queueBack = BinaryenExpressionCopy(queueBack, code);
     BinaryenExpressionRef queueBackOffset =
         BinaryenBinary(code, BinaryenMulInt64(), queueBack, builder.makeInt64(8));
     queueBackOffset = BinaryenUnary(code, BinaryenWrapInt64(), queueBackOffset);
@@ -307,7 +296,6 @@ void WasmEmitter::popQueue(Void *) {
     queueBack = BinaryenExpressionCopy(queueBack, code);
     BB(builder, BinaryenStore(code, 8, offsetof(RuntimeContext, queueBack), 0,
                               builder.getContextPtr(), queueBack, BinaryenTypeInt64()))
-    popFixup = true;
 }
 
 void WasmEmitter::pushStack(Value *value) {
@@ -341,54 +329,20 @@ void WasmEmitter::popStack(Void *) {
         BinaryenBinary(code, BinaryenAddInt32(), builder.getContextPtr(),
                        builder.makeInt32(offsetof(RuntimeContext, stackTops)));
     stackTopPtr = BinaryenBinary(code, BinaryenAddInt32(), stackTopPtr, str);
-    BinaryenExpressionRef stackUpperPtr =
-        BinaryenBinary(code, BinaryenAddInt32(), builder.getContextPtr(),
-                       builder.makeInt32(offsetof(RuntimeContext, stackUppers)));
-    stackUpperPtr = BinaryenBinary(code, BinaryenAddInt32(), stackUpperPtr, str);
-    BinaryenExpressionRef stackUpper =
-        BinaryenLoad(code, 4, true, 0, 0, BinaryenTypeInt32(), stackUpperPtr);
     BinaryenExpressionRef stackTop =
         BinaryenLoad(code, 4, true, 0, 0, BinaryenTypeInt32(), stackTopPtr);
-    emitJITRequest(stackUpper, stackTop, false);
-    stackTop = BinaryenExpressionCopy(stackTop, code);
     BinaryenExpressionRef value = BinaryenLoad(code, 8, true, 0, 0, BinaryenTypeInt64(), stackTop);
     builder.storeReg(dest.get(), value);
     stackTopPtr = BinaryenExpressionCopy(stackTopPtr, code);
     stackTop = BinaryenExpressionCopy(stackTop, code);
     stackTop = BinaryenBinary(code, BinaryenAddInt32(), stackTop, builder.makeInt32(8));
     BB(builder, BinaryenStore(code, 4, 0, 0, stackTopPtr, stackTop, BinaryenTypeInt32()))
-    popFixup = true;
 }
 
 void WasmEmitter::emitJITRequest(BinaryenExpressionRef head, BinaryenExpressionRef tail, bool i64) {
     BinaryenExpressionRef pred =
         BinaryenBinary(code, i64 ? BinaryenEqInt64() : BinaryenEqInt32(), head, tail);
     RelooperBlockRef body = builder.flush(true, true);
-    if (popFixup) {
-        if (inst->location.pointer.queue) {
-            BinaryenExpressionRef queueBack =
-                BinaryenLoad(code, 8, true, offsetof(RuntimeContext, queueBack), 0,
-                             BinaryenTypeInt64(), builder.getContextPtr());
-            queueBack = BinaryenBinary(code, BinaryenSubInt64(), queueBack, builder.makeInt64(1));
-            queueBack = BinaryenBinary(code, BinaryenAndInt64(), queueBack,
-                                       builder.makeInt64(conf.maxStorageSize - 1));
-            BB(builder, BinaryenStore(code, 8, offsetof(RuntimeContext, queueBack), 0,
-                                      builder.getContextPtr(), queueBack, BinaryenTypeInt64()))
-        } else {
-            BinaryenExpressionRef str =
-                BinaryenLoad(code, 4, true, offsetof(RuntimeContext, storage), 0,
-                             BinaryenTypeInt32(), builder.getContextPtr());
-            str = BinaryenBinary(code, BinaryenMulInt32(), str, builder.makeInt32(4));
-            BinaryenExpressionRef stackTopPtr =
-                BinaryenBinary(code, BinaryenAddInt32(), builder.getContextPtr(),
-                               builder.makeInt32(offsetof(RuntimeContext, stackTops)));
-            stackTopPtr = BinaryenBinary(code, BinaryenAddInt32(), stackTopPtr, str);
-            BinaryenExpressionRef stackTop =
-                BinaryenLoad(code, 4, true, 0, 0, BinaryenTypeInt32(), stackTopPtr);
-            stackTop = BinaryenBinary(code, BinaryenSubInt32(), stackTop, builder.makeInt32(8));
-            BB(builder, BinaryenStore(code, 4, 0, 0, stackTopPtr, stackTop, BinaryenTypeInt32()))
-        }
-    }
     uint64_t packed_loc = inst->location.pack();
     BB(builder,
        BinaryenStore(code, 8, offsetof(RuntimeContext, location), 0, builder.getContextPtr(),
@@ -434,5 +388,87 @@ void WasmEmitter::emitPrologue() {
 }
 
 void WasmEmitter::emitEpilouge() {
+    BB(builder, BinaryenNop(code))
+}
+
+void WasmEmitter::checkStack1(Void *) {
+    BinaryenExpressionRef str = BinaryenLoad(code, 4, true, offsetof(RuntimeContext, storage), 0,
+                                             BinaryenTypeInt32(), builder.getContextPtr());
+    str = BinaryenBinary(code, BinaryenMulInt32(), str, builder.makeInt32(4));
+    BinaryenExpressionRef stackTopPtr =
+        BinaryenBinary(code, BinaryenAddInt32(), builder.getContextPtr(),
+                       builder.makeInt32(offsetof(RuntimeContext, stackTops)));
+    stackTopPtr = BinaryenBinary(code, BinaryenAddInt32(), stackTopPtr, str);
+    BinaryenExpressionRef stackUpperPtr =
+        BinaryenBinary(code, BinaryenAddInt32(), builder.getContextPtr(),
+                       builder.makeInt32(offsetof(RuntimeContext, stackUppers)));
+    stackUpperPtr = BinaryenBinary(code, BinaryenAddInt32(), stackUpperPtr, str);
+    BinaryenExpressionRef stackUpper =
+        BinaryenLoad(code, 4, true, 0, 0, BinaryenTypeInt32(), stackUpperPtr);
+    BinaryenExpressionRef stackTop =
+        BinaryenLoad(code, 4, true, 0, 0, BinaryenTypeInt32(), stackTopPtr);
+    emitJITRequest(stackUpper, stackTop, false);
+    BB(builder, BinaryenNop(code))
+}
+
+void WasmEmitter::checkStack2(Void *) {
+    BinaryenExpressionRef str = BinaryenLoad(code, 4, true, offsetof(RuntimeContext, storage), 0,
+                                             BinaryenTypeInt32(), builder.getContextPtr());
+    str = BinaryenBinary(code, BinaryenMulInt32(), str, builder.makeInt32(4));
+    BinaryenExpressionRef stackTopPtr =
+        BinaryenBinary(code, BinaryenAddInt32(), builder.getContextPtr(),
+                       builder.makeInt32(offsetof(RuntimeContext, stackTops)));
+    stackTopPtr = BinaryenBinary(code, BinaryenAddInt32(), stackTopPtr, str);
+    BinaryenExpressionRef stackUpperPtr =
+        BinaryenBinary(code, BinaryenAddInt32(), builder.getContextPtr(),
+                       builder.makeInt32(offsetof(RuntimeContext, stackUppers)));
+    stackUpperPtr = BinaryenBinary(code, BinaryenAddInt32(), stackUpperPtr, str);
+    BinaryenExpressionRef stackUpper =
+        BinaryenLoad(code, 4, true, 0, 0, BinaryenTypeInt32(), stackUpperPtr);
+    BinaryenExpressionRef stackTop =
+        BinaryenLoad(code, 4, true, 0, 0, BinaryenTypeInt32(), stackTopPtr);
+    emitJITRequest(stackUpper, stackTop, false);
+    BB(builder, BinaryenNop(code))
+    stackTop = BinaryenExpressionCopy(stackTop, code);
+    stackUpper = BinaryenExpressionCopy(stackUpper, code);
+    stackTop = BinaryenBinary(code, BinaryenAddInt32(), stackTop, builder.makeInt32(8));
+    emitJITRequest(stackUpper, stackTop, false);
+    BB(builder, BinaryenNop(code))
+}
+
+void WasmEmitter::checkQueue1(Void *) {
+    BinaryenExpressionRef queueBackBefore =
+        BinaryenLoad(code, 8, true, offsetof(RuntimeContext, queueBack), 0, BinaryenTypeInt64(),
+                     builder.getContextPtr());
+    BinaryenExpressionRef queueBack =
+        BinaryenBinary(code, BinaryenAddInt64(), queueBackBefore, builder.makeInt64(1));
+    queueBack = BinaryenBinary(code, BinaryenAndInt64(), queueBack,
+                               builder.makeInt64(conf.maxStorageSize - 1));
+    BinaryenExpressionRef queueFront =
+        BinaryenLoad(code, 8, true, offsetof(RuntimeContext, queueFront), 0, BinaryenTypeInt64(),
+                     builder.getContextPtr());
+    emitJITRequest(queueBack, queueFront, true);
+    BB(builder, BinaryenNop(code))
+}
+
+void WasmEmitter::checkQueue2(Void *) {
+    BinaryenExpressionRef queueBackBefore =
+        BinaryenLoad(code, 8, true, offsetof(RuntimeContext, queueBack), 0, BinaryenTypeInt64(),
+                     builder.getContextPtr());
+    BinaryenExpressionRef queueBack =
+        BinaryenBinary(code, BinaryenAddInt64(), queueBackBefore, builder.makeInt64(1));
+    queueBack = BinaryenBinary(code, BinaryenAndInt64(), queueBack,
+                               builder.makeInt64(conf.maxStorageSize - 1));
+    BinaryenExpressionRef queueFront =
+        BinaryenLoad(code, 8, true, offsetof(RuntimeContext, queueFront), 0, BinaryenTypeInt64(),
+                     builder.getContextPtr());
+    emitJITRequest(queueBack, queueFront, true);
+    BB(builder, BinaryenNop(code))
+    queueBack = BinaryenExpressionCopy(queueBack, code);
+    queueFront = BinaryenExpressionCopy(queueFront, code);
+    queueBack = BinaryenBinary(code, BinaryenAddInt64(), queueBack, builder.makeInt64(1));
+    queueBack = BinaryenBinary(code, BinaryenAndInt64(), queueBack,
+                               builder.makeInt64(conf.maxStorageSize - 1));
+    emitJITRequest(queueBack, queueFront, true);
     BB(builder, BinaryenNop(code))
 }
