@@ -8,6 +8,7 @@
 
 - 64비트 windows, mac, linux (x86 아키텍쳐)
 - 웹어셈블리를 지원하는 웹 브라우저 및 nodejs ([웹 데모](https://sunho.io/AheuiJIT))
+- 안드로이드 (arm 64비트)
 
 ## 완성도
 
