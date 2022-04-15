@@ -1,7 +1,7 @@
 # Brief English introduction
 
 AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedocs.io/en/latest/specs.en.html) built from scratch. Its design is inspired by LLVM and dynarmic project.
-It's about 10 times faster than previous implementations of Aheui language. 
+It's about 10 times faster than the previously fastest implementations of Aheui language.
 
 # 아희짓
 
