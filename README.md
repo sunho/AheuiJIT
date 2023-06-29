@@ -1,6 +1,6 @@
 # AheuiJIT
 
-AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedocs.io/en/latest/specs.en.html) built from scratch. It implements JIT compilation without using any fancy external libraries. In fact, only libraries it depends on is assembler and c++ standard library. It's about 10 times faster than the previously fastest implementations of Aheui language.
+AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedocs.io/en/latest/specs.en.html) built from scratch. It implements JIT compilation without using any fancy external libraries. In fact, only libraries it depends on are assembler and c++ standard library. It's about 10 times faster than the previously fastest implementation of Aheui language.
 
 ## Supported devices
 - 64 bit windows, mac, linux (x86)
@@ -10,11 +10,11 @@ AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedo
 ## Features
 
 - It passes all [Aheui test cases](https://github.com/aheui/snippets) except the max 64 bit integer print test case.
-- It can run [aheui aheui](https://github.com/aheui/aheui.aheui) (aheui interpreter written in aheui)
-- It can even run aheui aheui aheui.
-- It's fast
+- It can run [aheui.aheui](https://github.com/aheui/aheui.aheui) (aheui interpreter written in aheui)
+- It can even run aheui.aheui.aheui.
+- It's fast!
     - It runs logo test case within 0.21 seconds.
-    - It runs aheui aheui + quine testcase within 0.7 seconds. (which is 8 times faster existing JIT compiler rpaheui)
+    - It runs aheui.aheui + quine testcase within 0.7 seconds. (which is 8 times faster than the existing JIT compiler rpaheui)
 - Web version is pretty fast as well.
     - It runs logo testcase within 0.23 seconds.
  
