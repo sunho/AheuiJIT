@@ -9,7 +9,7 @@ AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedo
 
 ## Features
 
-- It passes all [Aheui test cases](https://github.com/aheui/snippets) except one max 64 bit integer print test case.
+- It passes all [Aheui test cases](https://github.com/aheui/snippets) except the max 64 bit integer print test case.
 - It can run [aheui aheui](https://github.com/aheui/aheui.aheui) (aheui interpreter written in aheui)
 - It can even run aheui aheui aheui.
 - It's fast
