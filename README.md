@@ -9,7 +9,7 @@ AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedo
 
 ## Features
 
-- It passes all [Aheui test cases](https://github.com/aheui/snippets) except the max 64 bit integer print test case.
+- It passes all [Aheui test cases](https://github.com/aheui/snippets) except the 128 bit integer print test case.
 - It can run [aheui.aheui](https://github.com/aheui/aheui.aheui) (aheui interpreter written in aheui)
 - It can even run aheui.aheui.aheui.
 - It's fast!
@@ -34,7 +34,7 @@ AheuiJIT is a just in time compiler for [Aheui language](https://aheui.readthedo
 
 ## 완성도
 
-- [아희 테스트 케이스](https://github.com/aheui/snippets) 중 64 비트 정수 최대값 출력을 제외한 모든 테스트를 통과합니다.
+- [아희 테스트 케이스](https://github.com/aheui/snippets) 중 128 비트 정수 출력을 제외한 모든 테스트를 통과합니다.
     - 특히 저장소의 원소를 모두 소모하면 반대로 가는 스펙을 제대로 구현합니다.
 - 아희아희를 원할하게 구동합니다. (quine과 logo가 작동하는 것을 확인했습니다.)
 - 빠릅니다.
