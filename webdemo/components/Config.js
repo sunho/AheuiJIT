@@ -29,23 +29,23 @@ function Config() {
 
   return (
     <div className="Config">
-        <div className="ConfigField"> <span>인터프리터 사이클 수 (초기에 인터프리터 모드로 실행할 명령어 갯수): </span>
+        <div className="ConfigField"> <span>Initial interpreter cycles: </span>
          {numCycleInput}</div>
-         <div className="ConfigField"> <span> 인터프리터 fallback (저장소에 원소가 다 떨어졌을 잠시 동안 인터프리터 모드로 실행합니다): </span>
+         <div className="ConfigField"> <span> Fallback to interpreter for a while when it ran out of storage: </span>
             <ToggleButton
                 value={ interpretAfterFail }
                 onToggle={(value) => {
                     setinterpretAfterFail(!value)
                 }} />
         </div>
-        <div className="ConfigField"> <span>IR 최적화 (중간 언어레벨에서 최적화합니다):</span>
+        <div className="ConfigField"> <span> Optimize in Intermediate Representation (IR) level: </span>
             <ToggleButton
                 value={ optIR }
                 onToggle={(value) => {
                     setOptIR(!value)
                 }} />
         </div>
-        <div className="ConfigField"> <span> wasm 최적화 (웹어셈블리레벨에서 최적화합니다; 불안정): </span>
+        <div className="ConfigField"> <span> Optimize in WebAssembly level (unstable): </span>
             <ToggleButton
                 value={ optAsm }
                 onToggle={(value) => {
@@ -53,14 +53,14 @@ function Config() {
                 }} />
         </div>
         <div className="ConfigField"> 
-            <span> IR 로깅 (중간 언어를 콘솔에 출력합니다): </span>
+            <span> Log Intermediate Representation (IR) to Console: </span>
             <ToggleButton
                 value={ logIR }
                 onToggle={(value) => {
                     setLogIR(!value)
                 }} />
         </div>
-        <div className="ConfigField"> <span>wat 로깅 (jit된 웹어셈블리를 콘솔에 출력합니다): </span>
+        <div className="ConfigField"> <span> Log WebAssembly to Console: </span>
             <ToggleButton
                 value={ logDisasm }
                 onToggle={(value) => {

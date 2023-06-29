@@ -8,10 +8,10 @@
     "start": "next start"
   },
   "dependencies": {
-    "aheui-jit": "^1.0.9",
-    "next": "10.2.3",
-    "react": "17.0.2",
-    "react-dom": "17.0.2",
+    "aheui-jit": "^1.1.0",
+    "next": "^13.4.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-toggle-button": "^2.2.0"
   }
 }

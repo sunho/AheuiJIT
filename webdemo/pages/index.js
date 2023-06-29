@@ -4,7 +4,7 @@ const CodeRunner = dynamic(() => import('../components/CodeRunner'), { loading: 
 function Index() {
   return (
     <div className="App">
-       <a href="https://github.com/sunho/AheuiJIT" className="Source">소스코드 (github)</a>
+       <a href="https://github.com/sunho/AheuiJIT" className="Source">Source Code (github)</a>
         <div className="Logo">AheuiJIT web demo</div>
         <CodeRunner/>
     </div>
