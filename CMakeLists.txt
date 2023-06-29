@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.10.2)
 project(AheuiJIT)
 
-set(AHEUIJIT_TRAGET "X86" CACHE STRING "")
+option(AHEUIJIT_TRAGET "target for JIT compilation" "X86")
+option(ENABLE_ASAN "turn on address santiziers and various debug flags" OFF)
+
+if (ENABLE_ASAN)
+    add_compile_options(-fsanitize=address,undefined -g)
+    add_link_options(-fsanitize=address,undefined -g)
+endif()
 
 if(EMSCRIPTEN)
 set(WASM ON)
