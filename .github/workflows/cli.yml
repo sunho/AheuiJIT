@@ -12,7 +12,7 @@ jobs:
         config:
         - {
             name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
-            os: windows-latest,
+            os: windows-2019,
             build_type: "Release", cc: "cl", cxx: "cl",
             environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
           }
@@ -83,10 +83,10 @@ jobs:
     - name: Configure
       shell: cmake -P {0}
       run: |
-        if (NOT "${{ matrix.config.cc }}" STREQUAL "cl")
+        # if (NOT "${{ matrix.config.cc }}" STREQUAL "cl")
           set(ENV{CC} ${{ matrix.config.cc }})
           set(ENV{CXX} ${{ matrix.config.cxx }})
-        endif()
+        # endif()
 
         if ("${{ runner.os }}" STREQUAL "Windows" AND NOT "x${{ matrix.config.environment_script }}" STREQUAL "x")
           execute_process(
