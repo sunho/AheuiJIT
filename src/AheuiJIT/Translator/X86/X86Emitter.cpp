@@ -105,10 +105,12 @@ void X86Emitter::emit(BasicBlock *bb, const TLBTable &table, std::set<BasicBlock
             case TerminalType::Conditional: {
                 const auto lock4 = regAlloc.allocSystem(x86::rax);
                 ConditionalTerminal *term = dynamic_cast<ConditionalTerminal *>(block->terminal);
-                Reg predicate = unwrapValue(term->predicate);
-                code.mov(x86::rax, predicate.get());
-                regAlloc.emitDeinitStub();
-                regAlloc.finalize();
+                {
+                    Reg predicate = unwrapValue(term->predicate);
+                    code.mov(x86::rax, predicate.get());
+                    regAlloc.emitDeinitStub();
+                    regAlloc.finalize();
+                }
                 regAlloc.reset();
                 code.cmp(x86::rax, 0);
 

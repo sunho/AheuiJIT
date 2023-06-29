@@ -29,6 +29,9 @@ struct Reg {
         return getter();
     }
 
+    Reg(const Reg&) = delete;
+    Reg& operator=(const Reg&) = delete;
+
     Reg(Reg &&o) noexcept {
         std::swap(deleter, o.deleter);
         std::swap(getter, o.getter);

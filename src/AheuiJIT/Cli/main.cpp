@@ -21,8 +21,8 @@ int main(int argc, char* argv[]) {
     aheuijit::Runtime rt(aheuijit::creataeStdioMachine());
     auto conf = rt.getConfig();
     conf.numInterpretCycle = 0;
-    conf.logDisasm = true;
-    conf.logIR = true;
+    conf.logDisasm = false;
+    conf.logIR = false;
     rt.setConfig(conf);
     std::string str = readFile(argv[1]);
     std::u16string codecode = aheuijit::covnert_utf8_to_utf16(str);
