@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10.2)
 project(AheuiJIT)
 
-option(AHEUIJIT_TRAGET "target for JIT compilation" "X86")
+set(AHEUIJIT_TRAGET "X86" CACHE STRING "")
 option(ENABLE_ASAN "turn on address santiziers and various debug flags" OFF)
 
 if (ENABLE_ASAN)
